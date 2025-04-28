@@ -57,7 +57,7 @@ from pathlib import Path
 # Example: Download a single dataset
 # Note: Always use a Path object, not a string
 save_path = Path('./tmp/wh')
-identibench.workshop.wiener_hammerstein(save_path)
+identibench.datasets.workshop.wiener_hammerstein(save_path)
 ```
 
 ``` python
@@ -65,17 +65,17 @@ identibench.workshop.wiener_hammerstein(save_path)
 identibench.all_dataset_loader
 ```
 
-    [<function identibench.workshop.wiener_hammerstein(save_path: pathlib.Path)>,
-     <function identibench.workshop.silverbox(save_path: pathlib.Path)>,
-     <function identibench.workshop.cascaded_tanks(save_path: pathlib.Path)>,
-     <function identibench.workshop.emps(save_path: pathlib.Path)>,
-     <function identibench.workshop.noisy_wh(save_path: pathlib.Path)>,
-     <function identibench.industrial_robot.robot_forward(save_path: pathlib.Path)>,
-     <function identibench.industrial_robot.robot_inverse(save_path: pathlib.Path)>,
-     <function identibench.ship.ship(save_path: pathlib.Path, remove_download=True)>,
-     <function identibench.quad_pelican.quad_pelican(save_path: pathlib.Path, remove_download=False)>,
-     <function identibench.quad_pi.quad_pi(save_path: pathlib.Path, remove_download=False)>,
-     <function identibench.broad.broad(save_path: pathlib.Path)>]
+    [<function identibench.datasets.workshop.wiener_hammerstein(save_path: pathlib.Path, force_download: bool = False, save_train_valid: bool = True, split_idx: int = 80000)>,
+     <function identibench.datasets.workshop.silverbox(save_path: pathlib.Path, force_download: bool = False, save_train_valid: bool = True, split_idx: int = 50000)>,
+     <function identibench.datasets.workshop.cascaded_tanks(save_path: pathlib.Path, force_download: bool = False, save_train_valid: bool = True, split_idx: int = 160)>,
+     <function identibench.datasets.workshop.emps(save_path: pathlib.Path, force_download: bool = False, save_train_valid: bool = True, split_idx: int = 18000)>,
+     <function identibench.datasets.workshop.noisy_wh(save_path: pathlib.Path, force_download: bool = False, save_train_valid: bool = True)>,
+     <function identibench.datasets.industrial_robot.robot_forward(save_path: pathlib.Path, force_download: bool = False)>,
+     <function identibench.datasets.industrial_robot.robot_inverse(save_path: pathlib.Path, force_download: bool = False)>,
+     <function identibench.datasets.ship.ship(save_path: pathlib.Path, force_download: bool = False, remove_download=True)>,
+     <function identibench.datasets.quad_pelican.quad_pelican(save_path: pathlib.Path, force_download: bool = False, remove_download=False)>,
+     <function identibench.datasets.quad_pi.quad_pi(save_path: pathlib.Path, force_download: bool = False, remove_download: bool = False)>,
+     <function identibench.datasets.broad.broad(save_path: pathlib.Path, force_download: bool = True)>]
 
 ## HDF5 Data Format
 

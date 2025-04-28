@@ -2,10 +2,13 @@ website:
   sidebar:
     contents:
       - index.ipynb
-      - 00_core.ipynb
-      - 01_workshop.ipynb
-      - 02_industrial_robot.ipynb
-      - 03_ship.ipynb
-      - 04_quad_pelican.ipynb
-      - 05_quadrotor_pi.ipynb
-      - 06_broad.ipynb
+      - benchmark.ipynb
+      - data_utils.ipynb
+      - section: datasets
+        contents:
+          - datasets/broad.ipynb
+          - datasets/industrial_robot.ipynb
+          - datasets/quad_pelican.ipynb
+          - datasets/quadrotor_pi.ipynb
+          - datasets/ship.ipynb
+          - datasets/workshop.ipynb

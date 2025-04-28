@@ -1,4 +1,4 @@
-__version__ = "0.0.7"
+__version__ = "0.0.8"
 
 from identibench.datasets.workshop import *
 from identibench.datasets.industrial_robot import *
