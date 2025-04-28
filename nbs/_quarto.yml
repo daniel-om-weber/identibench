@@ -8,16 +8,16 @@ format:
     toc: true
 
 website:
-  title: "sysbench_loader"
-  favicon: https://raw.githubusercontent.com/daniel-om-weber/sysbench_loader/main/assets/logo.svg
+  title: "identibench"
+  favicon: https://raw.githubusercontent.com/daniel-om-weber/identibench/main/assets/logo.svg
   twitter-card: true
   open-graph: true
   repo-actions: [issue]
   navbar:
     background: primary
     search: true
-    logo: https://raw.githubusercontent.com/daniel-om-weber/sysbench_loader/main/assets/logo.svg
-    logo-alt: "sysbench_loader logo"
+    logo: https://raw.githubusercontent.com/daniel-om-weber/identibench/main/assets/logo.svg
+    logo-alt: "identibench logo"
   sidebar:
     style: floating
 
