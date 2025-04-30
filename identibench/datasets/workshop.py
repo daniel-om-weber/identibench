@@ -6,7 +6,7 @@
 __all__ = ['wiener_hammerstein', 'silverbox', 'cascaded_tanks', 'emps', 'noisy_wh', 'ced']
 
 # %% ../../nbs/datasets/workshop.ipynb 2
-from ..data_utils import *
+from ..utils import *
 import nonlinear_benchmarks
 from nonlinear_benchmarks.utilities import Input_output_data
 from pathlib import Path

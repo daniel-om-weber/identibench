@@ -6,7 +6,7 @@
 __all__ = ['robot_forward', 'robot_inverse']
 
 # %% ../../nbs/datasets/industrial_robot.ipynb 2
-from ..data_utils import write_dataset,write_array
+from ..utils import write_dataset,write_array
 from nonlinear_benchmarks.utilities import cashed_download
 from pathlib import Path
 import os

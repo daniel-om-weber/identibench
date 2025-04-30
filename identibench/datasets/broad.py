@@ -6,7 +6,7 @@
 __all__ = ['broad']
 
 # %% ../../nbs/datasets/broad.ipynb 2
-from ..data_utils import write_array
+from ..utils import write_array
 from pathlib import Path
 import os
 import h5py
