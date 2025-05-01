@@ -3,9 +3,8 @@ website:
     contents:
       - index.ipynb
       - benchmark.ipynb
-      - core.ipynb
-      - data_utils.ipynb
       - metrics.ipynb
+      - utils.ipynb
       - section: datasets
         contents:
           - datasets/broad.ipynb

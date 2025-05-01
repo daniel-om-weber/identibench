@@ -25,7 +25,6 @@ def get_default_data_root() -> Path:
 
 
 # %% ../nbs/utils.ipynb 7
-# Internal dummy loader - needed for tests below
 def _dummy_dataset_loader(
     save_path: Path, # Directory where the dummy dataset files will be written
     force_download: bool = False, # Argument for interface compatibility
