@@ -51,31 +51,65 @@ The package includes loaders for the following benchmark datasets:
 
 ``` python
 # Basic usage
-import identibench
+import identibench as idb
+import numpy as np
 from pathlib import Path
 
 # Example: Download a single dataset
 # Note: Always use a Path object, not a string
 save_path = Path('./tmp/wh')
-identibench.datasets.workshop.wiener_hammerstein(save_path)
+idb.datasets.workshop.wiener_hammerstein(save_path)
 ```
 
 ``` python
-# List all available dataset loaders
-identibench.all_dataset_loader
+from sysidentpy.model_structure_selection import FROLS
+from sysidentpy.parameter_estimation import LeastSquares
+def build_frols_model(context):
+    u_train, y_train, _ = next(context.get_train_sequences())
+    
+    ylag = context.hyperparameters.get('ylag', 5)
+    xlag = context.hyperparameters.get('xlag', 5)
+    n_terms = context.hyperparameters.get('n_terms', 10)
+    estimator = context.hyperparameters.get('estimator', LeastSquares())
+
+    _model = FROLS(xlag=xlag, ylag=ylag, n_terms=n_terms,estimator=estimator)
+    _model.fit(X=u_train, y=y_train)
+
+    def model(u_test, y_init):
+        nonlocal _model
+        yhat_full = _model.predict(X=u_test, y=y_init[:_model.max_lag])
+        y_pred = yhat_full[_model.max_lag:]
+        return y_pred
+    
+    return model
 ```
 
-    [<function identibench.datasets.workshop.wiener_hammerstein(save_path: pathlib.Path, force_download: bool = False, save_train_valid: bool = True, split_idx: int = 80000)>,
-     <function identibench.datasets.workshop.silverbox(save_path: pathlib.Path, force_download: bool = False, save_train_valid: bool = True, split_idx: int = 50000)>,
-     <function identibench.datasets.workshop.cascaded_tanks(save_path: pathlib.Path, force_download: bool = False, save_train_valid: bool = True, split_idx: int = 160)>,
-     <function identibench.datasets.workshop.emps(save_path: pathlib.Path, force_download: bool = False, save_train_valid: bool = True, split_idx: int = 18000)>,
-     <function identibench.datasets.workshop.noisy_wh(save_path: pathlib.Path, force_download: bool = False, save_train_valid: bool = True)>,
-     <function identibench.datasets.industrial_robot.robot_forward(save_path: pathlib.Path, force_download: bool = False)>,
-     <function identibench.datasets.industrial_robot.robot_inverse(save_path: pathlib.Path, force_download: bool = False)>,
-     <function identibench.datasets.ship.ship(save_path: pathlib.Path, force_download: bool = False, remove_download=True)>,
-     <function identibench.datasets.quad_pelican.quad_pelican(save_path: pathlib.Path, force_download: bool = False, remove_download=False)>,
-     <function identibench.datasets.quad_pi.quad_pi(save_path: pathlib.Path, force_download: bool = False, remove_download: bool = False)>,
-     <function identibench.datasets.broad.broad(save_path: pathlib.Path, force_download: bool = True)>]
+``` python
+hyperparams = {
+    'ylag': 2,
+    'xlag': 2,
+    'n_terms': 10, # Number of terms for FROLS
+    'estimator': LeastSquares()
+}
+
+idb.run_benchmark(
+    spec=idb.BenchmarkWH_Simulation,
+    build_model=build_frols_model,
+    hyperparameters=hyperparams
+)
+```
+
+    {'benchmark_name': 'BenchmarkWH_Simulation',
+     'dataset_id': 'wh',
+     'hyperparameters': {'ylag': 2,
+      'xlag': 2,
+      'n_terms': 10,
+      'estimator': <sysidentpy.parameter_estimation.estimators.LeastSquares>},
+     'seed': 3194310919,
+     'training_time_seconds': 0.9640552089986159,
+     'test_time_seconds': 1.0245963339984883,
+     'benchmark_type': 'BenchmarkSpecSimulation',
+     'metric_score': 0.2059879758473603}
 
 ## HDF5 Data Format
 

@@ -32,20 +32,26 @@ def wiener_hammerstein(
     dataset_to_hdf5(train,valid,test,save_path,train_valid=(train_val if save_train_valid else None))
 
 # %% ../../nbs/datasets/workshop.ipynb 9
+def rmse_mV(y_true,y_pred):
+    return identibench.metrics.rmse(y_true,y_pred)*1000
+
+# %% ../../nbs/datasets/workshop.ipynb 10
 BenchmarkWH_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkWH_Simulation', dataset_id='wh',
-    u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
+    u_cols=['u0'], y_cols=['y0'], 
+    metric_func=rmse_mV, 
     download_func=wiener_hammerstein,
-    init_window=100
+    init_window=50
 )
 BenchmarkWH_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkWH_Prediction', dataset_id='wh',
-    u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
+    u_cols=['u0'], y_cols=['y0'], 
+    metric_func=rmse_mV, 
     download_func=wiener_hammerstein,
-    init_window=100, pred_horizon=100, pred_step=100
+    init_window=50, pred_horizon=100, pred_step=100
 )
 
-# %% ../../nbs/datasets/workshop.ipynb 14
+# %% ../../nbs/datasets/workshop.ipynb 15
 def silverbox(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
@@ -58,21 +64,44 @@ def silverbox(
 
     dataset_to_hdf5(train,valid,test,save_path,train_valid=(train_val if save_train_valid else None))
 
-# %% ../../nbs/datasets/workshop.ipynb 16
+# %% ../../nbs/datasets/workshop.ipynb 17
+def evaluate_silverbox(results,spec):
+
+    test_configs = [
+        ('test_0.hdf5', 'multisine_rmse'),
+        ('test_1.hdf5', 'arrow_full_rmse'),
+        ('test_2.hdf5', 'arrow_no_extrapolation_rmse'),
+    ]
+
+    aggregated_scores = {}
+    for filename_part, score_name in test_configs:
+        # Find the index for the current filename part
+        idx = next(i for i, s in enumerate(spec.test_files) if filename_part in s.name) 
+        aggregated_scores.update(
+            idb.aggregate_metric_score([results[idx]], spec.metric_func, score_name=score_name)
+        )
+
+    return aggregated_scores
+
+# %% ../../nbs/datasets/workshop.ipynb 18
 BenchmarkSilverbox_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkSilverbox_Simulation', dataset_id='silverbox',
-    u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
+    u_cols=['u0'], y_cols=['y0'], 
+    metric_func=rmse_mV, 
     download_func=silverbox,
-    init_window=100
+    custom_test_evaluation=evaluate_silverbox,
+    init_window=50
 )
 BenchmarkSilverbox_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkSilverbox_Prediction', dataset_id='silverbox',
-    u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
+    u_cols=['u0'], y_cols=['y0'], 
+    metric_func=rmse_mV, 
     download_func=silverbox,
-    init_window=100, pred_horizon=100, pred_step=100
+    custom_test_evaluation=evaluate_silverbox,
+    init_window=50, pred_horizon=100, pred_step=100
 )
 
-# %% ../../nbs/datasets/workshop.ipynb 21
+# %% ../../nbs/datasets/workshop.ipynb 23
 def cascaded_tanks(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
@@ -85,21 +114,21 @@ def cascaded_tanks(
 
     dataset_to_hdf5(train,valid,test,save_path,train_valid=(train_val if save_train_valid else None))
 
-# %% ../../nbs/datasets/workshop.ipynb 23
+# %% ../../nbs/datasets/workshop.ipynb 25
 BenchmarkCascadedTanks_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkCascadedTanks_Simulation', dataset_id='cascaded_tanks',
     u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
     download_func=cascaded_tanks,
-    init_window=100
+    init_window=50
 )
 BenchmarkCascadedTanks_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkCascadedTanks_Prediction', dataset_id='cascaded_tanks',
     u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
     download_func=cascaded_tanks,
-    init_window=100, pred_horizon=100, pred_step=100
+    init_window=50, pred_horizon=100, pred_step=100
 )
 
-# %% ../../nbs/datasets/workshop.ipynb 28
+# %% ../../nbs/datasets/workshop.ipynb 30
 def emps(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
@@ -112,21 +141,21 @@ def emps(
 
     dataset_to_hdf5(train,valid,test,save_path,train_valid=(train_val if save_train_valid else None))
 
-# %% ../../nbs/datasets/workshop.ipynb 30
+# %% ../../nbs/datasets/workshop.ipynb 32
 BenchmarkEMPS_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkEMPS_Simulation', dataset_id='emps',
-    u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
+    u_cols=['u0'], y_cols=['y0'], metric_func=rmse_mV, 
     download_func=emps,
-    init_window=100
+    init_window=20
 )
 BenchmarkEMPS_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkEMPS_Prediction', dataset_id='emps',
-    u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
+    u_cols=['u0'], y_cols=['y0'], metric_func=rmse_mV, 
     download_func=emps,
-    init_window=100, pred_horizon=100, pred_step=100
+    init_window=20, pred_horizon=100, pred_step=100
 )
 
-# %% ../../nbs/datasets/workshop.ipynb 34
+# %% ../../nbs/datasets/workshop.ipynb 36
 from scipy.io import loadmat
 def noisy_wh(
         save_path: Path, #directory the files are written to, created if it does not exist
@@ -163,21 +192,21 @@ def noisy_wh(
                 shutil.copy2(f, (p:=Path(save_path)/'train_valid').mkdir(exist_ok=True) or p)
 
 
-# %% ../../nbs/datasets/workshop.ipynb 36
+# %% ../../nbs/datasets/workshop.ipynb 38
 BenchmarkNoisyWH_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkNoisyWH_Simulation', dataset_id='noisy_wh',
-    u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
+    u_cols=['u0'], y_cols=['y0'], metric_func=rmse_mV, 
     download_func=noisy_wh,
     init_window=100
 )
 BenchmarkNoisyWH_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkNoisyWH_Prediction', dataset_id='noisy_wh',
-    u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
+    u_cols=['u0'], y_cols=['y0'], metric_func=rmse_mV, 
     download_func=noisy_wh,
     init_window=100, pred_horizon=100, pred_step=100
 )
 
-# %% ../../nbs/datasets/workshop.ipynb 45
+# %% ../../nbs/datasets/workshop.ipynb 47
 def ced(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
@@ -190,16 +219,35 @@ def ced(
 
     dataset_to_hdf5(train,valid,test,save_path,train_valid=(train_val if save_train_valid else None))
 
-# %% ../../nbs/datasets/workshop.ipynb 47
+# %% ../../nbs/datasets/workshop.ipynb 49
+def evaluate_ced(results,spec):
+    test_configs = [
+        ('test_0.hdf5', 'test_1_rmse'),
+        ('test_1.hdf5', 'test_2_rmse'),
+    ]
+
+    aggregated_scores = {}
+    for filename_part, score_name in test_configs:
+        # Find the index for the current filename part
+        idx = next(i for i, s in enumerate(spec.test_files) if filename_part in s.name) 
+        aggregated_scores.update(
+            idb.aggregate_metric_score([results[idx]], spec.metric_func, score_name=score_name)
+        )
+
+    return aggregated_scores
+
+# %% ../../nbs/datasets/workshop.ipynb 50
 BenchmarkCED_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkCED_Simulation', dataset_id='ced',
     u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
     download_func=ced,
-    init_window=100
+    custom_test_evaluation=evaluate_ced,
+    init_window=10
 )
 BenchmarkCED_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkCED_Prediction', dataset_id='ced',
     u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
     download_func=ced,
-    init_window=100, pred_horizon=100, pred_step=100
+    custom_test_evaluation=evaluate_ced,
+    init_window=10, pred_horizon=100, pred_step=100
 )

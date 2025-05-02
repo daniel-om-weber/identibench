@@ -10,31 +10,21 @@ from typing import List, Optional, Callable, Dict, Any, Iterator, Tuple, Union
 from pathlib import Path
 import random
 import numpy as np
-import itertools
 import time
-from .utils import get_default_data_root,_load_sequences_from_files
+from .utils import get_default_data_root,_load_sequences_from_files, hdf_files_from_path
 
 # %% ../nbs/benchmark.ipynb 5
-def _test_simulation(specs, model):
-    test_dir = specs.dataset_path / 'test'
-    test_files = sorted(list(test_dir.glob('*.hdf5'))) 
-
-    if not test_files:
-        raise RuntimeError(f"No test files found in {test_dir}") 
-
-    all_scores = []
-    for u_test, y_test, _ in _load_sequences_from_files(test_files, specs.u_cols, specs.y_cols, specs.x_cols):
-        y_pred = model(u_test,y_test[:specs.init_window])
-        score = specs.metric_func(y_test, y_pred)
-        all_scores.append(score)
-            
-    if not all_scores:
-        final_score = np.nan 
-        print(f"Warning: No valid scores calculated for benchmark {specs.name}.")
+def aggregate_metric_score(test_results,metric_func, score_name=None ,sequence_aggregation_func=np.mean,window_aggregation_func=np.mean):
+    # iterate over test_results and calculate metric score for each (y_pred,y_test) tuple, if prediction, iterate over nested tuples with nested loop
+    if score_name is None:
+        score_name = metric_func.__name__
+    if isinstance(test_results[0], list):
+        scores = []
+        for windowed_sequence in test_results:
+            scores.append(window_aggregation_func([metric_func(y_pred,y_test) for y_pred,y_test in windowed_sequence]))
     else:
-        final_score = np.mean(all_scores).item() # Ensure scalar float
-
-    return {'metric_score': final_score}
+        scores = [[metric_func(y_pred,y_test) for y_pred,y_test in test_results]]
+    return {score_name: sequence_aggregation_func(scores)}
 
 # %% ../nbs/benchmark.ipynb 6
 class BenchmarkSpecBase: pass 
@@ -51,7 +41,8 @@ class BenchmarkSpecBase:
                  x_cols: Optional[List[str]] = None, # Optional state inputs (x).
                  sampling_time: Optional[float] = None, # Optional sampling time (seconds).
                  download_func: Optional[Callable[[Path, bool], None]] = None, # Dataset preparation func.
-                 test_func: Callable[[BenchmarkSpecBase, Callable], Dict[str, Any]] = _test_simulation, # Evaluation func.
+                 test_model_func: Callable[[BenchmarkSpecBase, Callable], Dict[str, Any]] = None,
+                 custom_test_evaluation = None, 
                  init_window: Optional[int] = None, # Steps for warm-up, potentially ignored in evaluation.
                  data_root: [Path, Callable[[], Path]] = get_default_data_root # root dir for dataset, may be a callable or path
                 ):
@@ -63,13 +54,10 @@ class BenchmarkSpecBase:
         self.x_cols = x_cols
         self.sampling_time = sampling_time
         self.download_func = download_func
-        self.test_func = test_func
+        self.test_model_func = test_model_func
+        self.custom_test_evaluation = custom_test_evaluation
         self.init_window = init_window
         self._data_root = data_root
-
-        # Ensure required parameters have valid values if needed (basic checks)
-        if not self.name or not self.dataset_id or not self.u_cols or not self.y_cols or not self.metric_func:
-             raise ValueError("Core benchmark parameters (name, dataset_id, u_cols, y_cols, metric_func) are required.")
 
     @property
     def data_root(self) -> Path:
@@ -82,6 +70,52 @@ class BenchmarkSpecBase:
     def dataset_path(self) -> Path:
         """Returns the full path to the dataset directory."""
         return self.data_root / self.dataset_id
+    
+    @property
+    def test_path(self) -> Path:
+        """Returns the full path to the directory containing the test files ."""
+        return self.dataset_path / 'test'
+    
+    @property
+    def train_path(self) -> Path:
+        """Returns the full path to the directory containing the train files."""
+        return self.dataset_path / 'train'
+    
+    @property
+    def valid_path(self) -> Path:
+        """Returns the full path to the directory containing the valid files."""
+        return self.dataset_path / 'valid'
+    
+    @property
+    def train_valid_path(self) -> Path:
+        """Returns the full path to the directory containing the train_valid files."""
+        return self.dataset_path / 'train_valid'
+    
+    @property
+    def train_files(self) -> List[Path]:
+        """Returns the list of hdf5 files in the training directory."""
+        return hdf_files_from_path(self.train_path)
+    
+    @property
+    def valid_files(self) -> List[Path]:
+        """Returns the list of hdf5 files in the validation directory."""
+        return hdf_files_from_path(self.valid_path)
+    
+    @property
+    def train_valid_files(self) -> List[Path]:
+        """Returns the list of hdf5 files in the train_valid directory if it exists, otherwise returns the union of the train and valid directories."""
+        train_valid_files = hdf_files_from_path(self.train_valid_path)
+        if train_valid_files: 
+            return train_valid_files
+        else:
+            train_files = hdf_files_from_path(self.train_path)
+            valid_files = hdf_files_from_path(self.valid_path)
+            return sorted(train_files+valid_files)
+
+    @property
+    def test_files(self) -> List[Path]:
+        """Returns the list of hdf5 files in the test directory."""
+        return hdf_files_from_path(self.test_path)
 
     def ensure_dataset_exists(self, force_download: bool = False) -> None:
         """Checks if the dataset exists, downloads/prepares it if needed."""
@@ -103,8 +137,17 @@ class BenchmarkSpecBase:
                 print(f"Error preparing dataset '{self.name}': {e}")
                 raise
 
-
 # %% ../nbs/benchmark.ipynb 7
+def _test_simulation(specs, model):
+    results = []
+    for u_test, y_test, _ in _load_sequences_from_files(specs.test_files, specs.u_cols, specs.y_cols, specs.x_cols):
+        y_pred = model(u_test,y_test[:specs.init_window])
+        y_test_win = y_test[specs.init_window:]
+        y_pred = y_pred[-y_test_win.shape[0]:]
+        results.append((y_pred,y_test_win))
+    return results
+
+# %% ../nbs/benchmark.ipynb 8
 class BenchmarkSpecSimulation(BenchmarkSpecBase):
     """
     Specification for a simulation benchmark task.
@@ -112,48 +155,88 @@ class BenchmarkSpecSimulation(BenchmarkSpecBase):
     Inherits common parameters from BaseBenchmarkSpec.
     Use this when the goal is to simulate the system's output given the input `u`.
     """
-
-# %% ../nbs/benchmark.ipynb 8
-def _test_prediction(specs: BenchmarkSpecBase, model: Callable):
-    test_dir = specs.dataset_path / 'test'
-    test_files = sorted(list(test_dir.glob('*.hdf5'))) 
-
-    if not test_files:
-        raise RuntimeError(f"No test files found in {test_dir}") 
-
-    all_scores = []
-    for u_test, y_test, _ in _load_sequences_from_files(test_files, specs.u_cols, specs.y_cols, specs.x_cols):
-        y_pred = model(u_test,y_test[:specs.init_window])
-        score = specs.metric_func(y_test, y_pred)
-        all_scores.append(score)
-            
-    if not all_scores:
-        final_score = np.nan 
-        print(f"Warning: No valid scores calculated for benchmark {specs.name}.")
-    else:
-        final_score = np.mean(all_scores).item() # Ensure scalar float
-
-    return {'metric_score': final_score}
+    def __init__(self,
+                name: str, # Unique name identifying this benchmark task.
+                dataset_id: str, # Identifier for the raw dataset source.
+                u_cols: List[str], # List of column names for input signals (u).
+                y_cols: List[str], # List of column names for output signals (y).
+                metric_func: Callable[[np.ndarray, np.ndarray], float], # Primary metric: `func(y_true, y_pred)`.
+                x_cols: Optional[List[str]] = None, # Optional state inputs (x).
+                sampling_time: Optional[float] = None, # Optional sampling time (seconds).
+                download_func: Optional[Callable[[Path, bool], None]] = None, # Dataset preparation func.
+                test_model_func: Callable[[BenchmarkSpecBase, Callable], Dict[str, Any]] = _test_simulation,
+                custom_test_evaluation = None, 
+                init_window: Optional[int] = None, # Steps for warm-up, potentially ignored in evaluation.
+                data_root: [Path, Callable[[], Path]] = get_default_data_root # root dir for dataset, may be a callable or path
+            ):
+        self.name = name
+        self.dataset_id = dataset_id
+        self.u_cols = u_cols
+        self.y_cols = y_cols
+        self.metric_func = metric_func
+        self.x_cols = x_cols
+        self.sampling_time = sampling_time
+        self.download_func = download_func
+        self.test_model_func = test_model_func
+        self.custom_test_evaluation = custom_test_evaluation
+        self.init_window = init_window
+        self._data_root = data_root
 
 # %% ../nbs/benchmark.ipynb 9
-class BenchmarkSpecPrediction(BenchmarkSpecBase):
-    """
-    Specification for a k-step ahead prediction benchmark task.
+def _test_prediction(specs, model):
+    results = []
+    for u_test, y_test, _ in _load_sequences_from_files(specs.test_files, specs.u_cols, specs.y_cols, specs.x_cols):
+        #iterate through windows of u_test and y_test
+        window_results = []
+        for i in range(0, u_test.shape[0] - specs.init_window, specs.pred_step):
+            u_test_win = u_test[i:i+specs.init_window]
+            y_test_win = y_test[i:i+specs.init_window]
+            y_pred = model(u_test_win,y_test_win[:specs.init_window])
+            window_results.append((y_pred,y_test_win))
+        results.append(window_results)
+    return results
 
-    Inherits common parameters from BaseBenchmarkSpec and adds prediction-specific ones.
-    Use this when the goal is to predict `y` some steps ahead based on past `u` and `y`.
-    """
-    def __init__(self,
-                 pred_horizon: int, # The 'k' in k-step ahead prediction (mandatory for this type).
-                 pred_step: int, # Step size for k-step ahead prediction (e.g., predict y[t+k] using data up to t).
-                 test_func: Callable[[BenchmarkSpecBase, Callable], Dict[str, Any]] = _test_prediction, # Evaluation func.
-                 **kwargs # Capture all base class arguments
-                ):
-        super().__init__(**kwargs) # Initialize base class attributes
-        if pred_horizon <= 0:
-             raise ValueError("pred_horizon must be a positive integer for PredictionBenchmarkSpec.")
-        self.pred_horizon = pred_horizon
-        self.pred_step = pred_step
+# %% ../nbs/benchmark.ipynb 10
+class BenchmarkSpecPrediction(BenchmarkSpecBase):
+     """
+     Specification for a k-step ahead prediction benchmark task.
+
+     Inherits common parameters from BaseBenchmarkSpec and adds prediction-specific ones.
+     Use this when the goal is to predict `y` some steps ahead based on past `u` and `y`.
+     """
+     def __init__(self,
+               name: str, # Unique name identifying this benchmark task.
+               dataset_id: str, # Identifier for the raw dataset source.
+               u_cols: List[str], # List of column names for input signals (u).
+               y_cols: List[str], # List of column names for output signals (y).
+               metric_func: Callable[[np.ndarray, np.ndarray], float], # Primary metric: `func(y_true, y_pred)`.
+               pred_horizon: int, # The 'k' in k-step ahead prediction (mandatory for this type).
+               pred_step: int, # Step size for k-step ahead prediction (e.g., predict y[t+k] using data up to t).
+               x_cols: Optional[List[str]] = None, # Optional state inputs (x).
+               sampling_time: Optional[float] = None, # Optional sampling time (seconds).
+               download_func: Optional[Callable[[Path, bool], None]] = None, # Dataset preparation func.
+               test_model_func: Callable[[BenchmarkSpecBase, Callable], Dict[str, Any]] = _test_prediction,
+               custom_test_evaluation = None, 
+               init_window: Optional[int] = None, # Steps for warm-up, potentially ignored in evaluation.
+               data_root: [Path, Callable[[], Path]] = get_default_data_root # root dir for dataset, may be a callable or path
+          ):
+          if pred_horizon <= 0:
+               raise ValueError("pred_horizon must be a positive integer for PredictionBenchmarkSpec.")
+          self.pred_horizon = pred_horizon
+          self.pred_step = pred_step
+          
+          self.name = name
+          self.dataset_id = dataset_id
+          self.u_cols = u_cols
+          self.y_cols = y_cols
+          self.metric_func = metric_func
+          self.x_cols = x_cols
+          self.sampling_time = sampling_time
+          self.download_func = download_func
+          self.test_model_func = test_model_func
+          self.custom_test_evaluation = custom_test_evaluation
+          self.init_window = init_window
+          self._data_root = data_root
 
 # %% ../nbs/benchmark.ipynb 17
 class TrainingContext:
@@ -177,35 +260,23 @@ class TrainingContext:
 
     # --- Data Access Methods ---
 
-    def _get_file_paths(self, subset: str) -> List[Path]:
-        """Gets sorted list of HDF5 files for a given subset directory."""
-        subset_path = self.spec.dataset_path / subset
-        if not subset_path.is_dir():
-            return []
-        return sorted(list(subset_path.glob('*.hdf5')))
-
-    def _get_sequences_from_subset(self, subset: str
-                                  ) -> Iterator[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]]:
-        """Loads raw sequences for a specific subset directory."""
-        file_paths = self._get_file_paths(subset)
-        if not file_paths:
-             print(f"Warning: No HDF5 files found in {self.spec.dataset_path / subset}. Returning empty iterator.")
-             return iter([])
-
+    def get_train_sequences(self) -> Iterator[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]]:
+        """Returns a lazy iterator yielding raw (u, y, x) tuples for the 'train' subset."""
         return _load_sequences_from_files(
-            file_paths=file_paths,
+            file_paths=self.spec.train_files,
             u_cols=self.spec.u_cols,
             y_cols=self.spec.y_cols,
             x_cols=self.spec.x_cols,
         )
 
-    def get_train_sequences(self) -> Iterator[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]]:
-        """Returns a lazy iterator yielding raw (u, y, x) tuples for the 'train' subset."""
-        return self._get_sequences_from_subset('train')
-
     def get_valid_sequences(self) -> Iterator[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]]:
         """Returns a lazy iterator yielding raw (u, y, x) tuples for the 'valid' subset."""
-        return self._get_sequences_from_subset('valid')
+        return _load_sequences_from_files(
+            file_paths=self.spec.valid_files,
+            u_cols=self.spec.u_cols,
+            y_cols=self.spec.y_cols,
+            x_cols=self.spec.x_cols,
+        )
 
     def get_train_valid_sequences(self) -> Iterator[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]]:
         """
@@ -214,16 +285,12 @@ class TrainingContext:
         Checks for a 'train_valid' subset directory first. If it exists, loads data from there.
         If not, it loads data from 'train' and 'valid' subsets sequentially.
         """
-        train_valid_files = self._get_file_paths('train_valid')
-        if train_valid_files:
-            return _load_sequences_from_files(
-                file_paths=train_valid_files, u_cols=self.spec.u_cols, y_cols=self.spec.y_cols,
-                x_cols=self.spec.x_cols
-            )
-        else:
-            train_iter = self._get_sequences_from_subset('train')
-            valid_iter = self._get_sequences_from_subset('valid')
-            return itertools.chain(train_iter, valid_iter)
+        return _load_sequences_from_files(
+            file_paths=self.spec.train_valid_files,
+            u_cols=self.spec.u_cols,
+            y_cols=self.spec.y_cols,
+            x_cols=self.spec.x_cols,
+        )
 
 # %% ../nbs/benchmark.ipynb 20
 def run_benchmark(spec, build_model, hyperparameters={}, seed=None):
@@ -238,7 +305,11 @@ def run_benchmark(spec, build_model, hyperparameters={}, seed=None):
         'seed': seed,
         'training_time_seconds': np.nan,
         'test_time_seconds': np.nan,
-        'benchmark_type' : type(spec).__name__
+        'benchmark_type' : type(spec).__name__,
+        'metric_name': spec.metric_func.__name__,
+        'metric_score': np.nan,
+        'custom_scores': {},
+        'model_predictions': []
     }
 
     spec.ensure_dataset_exists() 
@@ -254,12 +325,15 @@ def run_benchmark(spec, build_model, hyperparameters={}, seed=None):
         raise RuntimeError(f"build_model for {spec.name} did not return a model.") 
         
     test_start_time = time.monotonic()
-    test_results = spec.test_func(spec, model)
+    test_results = spec.test_model_func(spec, model) # get list of (y_pred,y_test) tuples
     test_end_time = time.monotonic()
-
     results['test_time_seconds'] = test_end_time - test_start_time
-    
-    results.update(test_results) # Merge test results
+
+    results['model_predictions'] = test_results
+
+    results.update(aggregate_metric_score(test_results, spec.metric_func, score_name='metric_score'))
+    if spec.custom_test_evaluation is not None:
+        results['custom_scores'] = spec.custom_test_evaluation(test_results, spec)
         
     return results
 
@@ -274,7 +348,7 @@ def _dummy_build_model(context):
         
     return dummy_model # Return the callable model
 
-# %% ../nbs/benchmark.ipynb 26
+# %% ../nbs/benchmark.ipynb 31
 def run_multiple_benchmarks(
     specs: Union[List[BenchmarkSpecBase], Dict[str, BenchmarkSpecBase]], # Collection of specs to run
     build_model: Callable[[TrainingContext], Callable], # User function to build the model/predictor
