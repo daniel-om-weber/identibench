@@ -295,7 +295,7 @@ def quad_pi(
         save_path: Path, # directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
         remove_download: bool = False # remove downloaded zip/extracted bags afterwards
-):
+) -> None:
     save_path = Path(save_path)
     save_path.mkdir(parents=True, exist_ok=True)
 

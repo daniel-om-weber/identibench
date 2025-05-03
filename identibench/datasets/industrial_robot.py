@@ -22,7 +22,7 @@ import scipy.io as sio
 def robot_mat2hdf(
         save_path: Path, #directory the files are written to, created if it does not exist
         mat_path: Path, #path of mat file to extract
-):         
+) -> None:         
     'converts .mat file of industrial robot to hdf5 file, used for forward and inverse'
 
 
@@ -63,7 +63,7 @@ def robot_mat2hdf(
 def robot_forward(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False # force download the dataset
-):
+) -> None:
     save_path = Path(save_path)
     url_robot = "https://fdm-fallback.uni-kl.de/TUK/FB/MV/WSKL/0001/Robot_Identification_Benchmark_Without_Raw_Data.rar"
     # unrar_download(url_robot,tmp_dir)
@@ -97,7 +97,7 @@ BenchmarkRobotForward_Prediction = idb.BenchmarkSpecPrediction(
 def robot_inverse(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False # force download the dataset
-):
+) -> None:
     save_path = Path(save_path)
     url_robot = "https://fdm-fallback.uni-kl.de/TUK/FB/MV/WSKL/0001/Robot_Identification_Benchmark_Without_Raw_Data.rar"
     # unrar_download(url_robot,tmp_dir)

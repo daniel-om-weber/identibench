@@ -21,8 +21,8 @@ import shutil
 def ship(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
-        remove_download = True
-):
+        remove_download: bool = True
+) -> None:
     save_path = Path(save_path)
     download_dir = Path(get_tmp_benchmark_directory()) / 'Ship'
 
@@ -48,7 +48,7 @@ def ship(
     for subdir in structure_mapping.values():
         os.makedirs(os.path.join(save_path, subdir), exist_ok=True)
 
-    def convert_tab_to_hdf5(tab_path, hdf5_path):
+    def convert_tab_to_hdf5(tab_path: Path, hdf5_path: Path) -> None:
         df = pd.read_csv(tab_path, sep='\t')
         with h5py.File(hdf5_path, 'w') as hdf:
             for column in df.columns:

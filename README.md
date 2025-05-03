@@ -52,7 +52,6 @@ The package includes loaders for the following benchmark datasets:
 ``` python
 # Basic usage
 import identibench as idb
-import numpy as np
 from pathlib import Path
 
 # Example: Download a single dataset

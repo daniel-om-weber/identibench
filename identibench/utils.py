@@ -8,6 +8,7 @@ __all__ = ['get_default_data_root', 'hdf_files_from_path', 'write_dataset', 'wri
 
 # %% ../nbs/utils.ipynb 3
 from nonlinear_benchmarks import *
+from collections.abc import Iterator
 from pathlib import Path
 import numpy as np
 import h5py
@@ -29,7 +30,7 @@ def _dummy_dataset_loader(
     save_path: Path, # Directory where the dummy dataset files will be written
     force_download: bool = False, # Argument for interface compatibility
     create_train_valid_dir: bool = False # If True, create a 'train_valid' subdir as well
-    ):
+    ) -> None:
     """Creates a dummy dataset structure with minimal HDF5 files for testing."""
     save_path = Path(save_path)
     if save_path.is_dir() and not force_download: return
@@ -55,11 +56,18 @@ def _dummy_dataset_loader(
             except Exception as e: print(f"Failed to create dummy file {dummy_file_path}: {e}")
 
 # %% ../nbs/utils.ipynb 8
-def hdf_files_from_path(fpath):
+def hdf_files_from_path(fpath: Path) -> list[Path]:
         return sorted(list(fpath.glob('*.hdf5'))) 
 
 # %% ../nbs/utils.ipynb 10
-def _load_sequences_from_files(file_paths, u_cols, y_cols, x_cols=None, win_sz=None, stp_sz=None):
+def _load_sequences_from_files(
+        file_paths: list[Path],
+        u_cols: list[str],
+        y_cols: list[str],
+        x_cols: list[str]|None = None,
+        win_sz: int|None = None,
+        stp_sz: int|None = None
+    ) -> Iterator[tuple[np.ndarray, np.ndarray, np.ndarray|None]]:
     if not file_paths: return iter([]) 
     if win_sz is None and stp_sz is not None:
         raise ValueError("win_sz must be provided if stp_sz is provided")
@@ -89,30 +97,32 @@ def _load_sequences_from_files(file_paths, u_cols, y_cols, x_cols=None, win_sz=N
             yield u_data[start:end], y_data[start:end], x_win
 
 # %% ../nbs/utils.ipynb 14
-def write_dataset(group, #opened hdf5 group to write the dataset, can be a file or group
-         ds_name:str, #name of the new dataset
-         data: np.array, #data to write to the dataset
-         dtype='f4', #datatype, the data will be converted to
-         chunks=None #chunking of the hdf5 file, enables faster reading and writing of small parts
-         ):
-    group.create_dataset(ds_name, data=data, dtype=dtype, chunks=chunks)
+def write_dataset(
+     group: h5py.File | h5py.Group,
+     ds_name: str,
+     data: np.ndarray,
+     dtype: str = 'f4',
+     chunks: tuple[int, ...]|None = None
+     ) -> None:
+     group.create_dataset(ds_name, data=data, dtype=dtype, chunks=chunks)
 
-# %% ../nbs/utils.ipynb 16
-def write_array(group, #opened hdf5 group to write the dataset, can be a file or group
-                ds_name:str, #name of the new dataset
-                data: np.array, #data to write to the dataset
-                dtype='f4', #datatype, the data will be converted to
-                chunks=None #chunking of the hdf5 file, enables faster reading and writing of small parts
-                ) -> None:
+# %% ../nbs/utils.ipynb 17
+def write_array(
+        group: h5py.File | h5py.Group,
+        ds_name: str,
+        data: np.ndarray,
+        dtype: str = 'f4',
+        chunks: tuple[int, ...]|None = None
+    ) -> None:
     'Writes a 2d numpy array rowwise to a hdf5 file.'
     for i in range(data.shape[1]):
         write_dataset(group, f'{ds_name}{i}', data[:,i], dtype, chunks)
 
-# %% ../nbs/utils.ipynb 18
+# %% ../nbs/utils.ipynb 19
 def iodata_to_hdf5(iodata:Input_output_data, # data to save to file
             hdf_dir:Path, # Export directory for hdf5 files
             f_name:str = None # name of hdf5 file without '.hdf5' ending
-            ):
+            ) -> Path:
     data_2d = iodata.atleast_2d()
     u,y = data_2d.u, data_2d.y
     
@@ -132,13 +142,13 @@ def iodata_to_hdf5(iodata:Input_output_data, # data to save to file
 
     return hdf_path 
 
-# %% ../nbs/utils.ipynb 25
+# %% ../nbs/utils.ipynb 26
 def dataset_to_hdf5(train:tuple, #tuple of Input_output_data for training
                     valid:tuple,#tuple of Input_output_data for validation
                     test:tuple,#tuple of Input_output_data for test
                     save_path: Path, #directory the files are written to, created if it does not exist
                     train_valid: tuple = None # optional tuple of unsplit Input_output_data for training and validation
-                    ):
+                    ) -> None:
     'Save a dataset consisting of training, validation, and test set in hdf5 format in seperate subdirectories'
     save_path = Path(save_path)
     
@@ -161,35 +171,35 @@ def dataset_to_hdf5(train:tuple, #tuple of Input_output_data for training
         for idx,iodata in enumerate(ds_entries):
             iodata_to_hdf5(iodata,save_path / subset,f'{subset}_{idx}')
 
-# %% ../nbs/utils.ipynb 29
+# %% ../nbs/utils.ipynb 30
 import requests
 import io
 import os
 import zipfile
 import rarfile
 
-# %% ../nbs/utils.ipynb 30
+# %% ../nbs/utils.ipynb 31
 def unzip_download(url:str, #url to file to download
-                   extract_dir = '.' #directory the archive is extracted to
-                   ):
+                   extract_dir: Path = Path('.') #directory the archive is extracted to
+                   ) -> None:
     'downloads a zip archive to ram and extracts it'
     response = requests.get(url)
     with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
         zip_ref.extractall(extract_dir)
 
-# %% ../nbs/utils.ipynb 31
+# %% ../nbs/utils.ipynb 32
 def unrar_download(url:str, #url to file to download
-                   extract_dir = '.' #directory the archive is extracted to
-                   ):
+                   extract_dir: Path = Path('.') #directory the archive is extracted to
+                   ) -> None:
     'downloads a rar archive to ram and extracts it'
     response = requests.get(url)
     with rarfile.RarFile(io.BytesIO(response.content)) as zip_ref:
         zip_ref.extractall(extract_dir)
 
-# %% ../nbs/utils.ipynb 32
+# %% ../nbs/utils.ipynb 33
 def download(url:str, #url to file to download
-             target_dir = '.'
-             ):
+             target_dir: Path = Path('.')
+             ) -> Path:
     fname = Path(url).name
     if os.path.isfile(fname): return
     response = requests.get(url)

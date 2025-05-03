@@ -14,6 +14,7 @@ import identibench.metrics
 from pathlib import Path
 import os
 import h5py
+import numpy as np
 import scipy.io as sio
 
 # %% ../../nbs/datasets/quad_pelican.ipynb 3
@@ -75,7 +76,7 @@ pelican_fnames_test = [  'hdf5flight8.hdf5',
                          'hdf5flight46.hdf5']
 
 def get_parent_dir(f_name: str # name of the flight
-                  ):
+                  ) -> str:
     if f_name in pelican_fnames_train:
         return 'train'
     elif f_name in pelican_fnames_valid:
@@ -89,15 +90,15 @@ def get_parent_dir(f_name: str # name of the flight
 def quad_pelican(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
-        remove_download = False
-):
+        remove_download: bool = False
+) -> None:
     save_path = Path(save_path)
     url_pelican = 'http://wavelab.uwaterloo.ca/wp-content/uploads/2017/09/AscTec_Pelican_Flight_Dataset.mat'
    
     tmp_dir = cashed_download(url_pelican,'Quad_pelican',zipped=False,force_download=force_download)
     downloaded_fname = Path(tmp_dir) / Path(url_pelican).name
     
-    def write_signal(fname, sname, signal):
+    def write_signal(fname: Path, sname: str, signal: np.ndarray) -> None:
         with h5py.File(fname, 'a') as f:
             for i in range(signal.shape[1]):
                 ds_name = f'{sname}{i+1}'

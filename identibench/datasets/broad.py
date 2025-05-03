@@ -17,7 +17,7 @@ from io import BytesIO
 def broad(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = True, # force download the dataset
-):
+) -> None:
     save_path = Path(save_path)
 
     idxs_valid = ['14_', '39_', '21_']
@@ -49,7 +49,7 @@ def broad(
             # Write file to local system
             with h5py.File(tmp_file) as f_read:
                 with h5py.File(hdf_path / file['name'],'w') as f_write:
-                    def transfer_dataset(ds_name):
+                    def transfer_dataset(ds_name: str) -> None:
                         x = f_read[ds_name][:]
                         if x.ndim == 2:
                             write_array(f_write,ds_name,x,dtype='f4')

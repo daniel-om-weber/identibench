@@ -14,6 +14,7 @@ from ..utils import *
 import identibench.benchmark as idb
 import identibench.metrics
 import nonlinear_benchmarks
+import numpy as np
 from nonlinear_benchmarks.utilities import Input_output_data
 from pathlib import Path
 import shutil
@@ -24,7 +25,7 @@ def wiener_hammerstein(
         force_download: bool = False, # force download the dataset
         save_train_valid: bool = True, # save unsplitted train and valid datasets in 'train_valid' subdirectory
         split_idx: int = 80_000 # split index for train and valid datasets
-):
+) -> None:
     train_val, test = nonlinear_benchmarks.WienerHammerBenchMark(force_download=force_download)
     train = train_val[:split_idx]
     valid = train_val[split_idx:]
@@ -32,7 +33,7 @@ def wiener_hammerstein(
     dataset_to_hdf5(train,valid,test,save_path,train_valid=(train_val if save_train_valid else None))
 
 # %% ../../nbs/datasets/workshop.ipynb 9
-def rmse_mV(y_true,y_pred):
+def rmse_mV(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     return identibench.metrics.rmse(y_true,y_pred)*1000
 
 # %% ../../nbs/datasets/workshop.ipynb 10
@@ -57,7 +58,7 @@ def silverbox(
         force_download: bool = False, # force download the dataset
         save_train_valid: bool = True, # save unsplitted train and valid datasets in 'train_valid' subdirectory
         split_idx: int = 50_000 # split index for train and valid datasets
-):
+) -> None:
     train_val, test = nonlinear_benchmarks.Silverbox(force_download=force_download)
     train = train_val[:split_idx]
     valid = train_val[split_idx:]
@@ -65,7 +66,7 @@ def silverbox(
     dataset_to_hdf5(train,valid,test,save_path,train_valid=(train_val if save_train_valid else None))
 
 # %% ../../nbs/datasets/workshop.ipynb 17
-def evaluate_silverbox(results,spec):
+def evaluate_silverbox(results: list[tuple[np.ndarray, np.ndarray]], spec: idb.BenchmarkSpecBase) -> dict[str, float]:
 
     test_configs = [
         ('test_0.hdf5', 'multisine_rmse'),
@@ -107,7 +108,7 @@ def cascaded_tanks(
         force_download: bool = False, # force download the dataset
         save_train_valid: bool = True, # save unsplitted train and valid datasets in 'train_valid' subdirectory
         split_idx: int = 160 # split index for train and valid datasets
-):
+) -> None:
     train_val, test = nonlinear_benchmarks.Cascaded_Tanks(force_download=force_download)
     train = train_val[split_idx:]
     valid = train_val[:split_idx]
@@ -134,7 +135,7 @@ def emps(
         force_download: bool = False, # force download the dataset
         save_train_valid: bool = True, # save unsplitted train and valid datasets in 'train_valid' subdirectory
         split_idx: int = 18_000 # split index for train and valid datasets
-):
+) -> None:
     train_val, test = nonlinear_benchmarks.EMPS(force_download=force_download)
     train = train_val[:split_idx]
     valid = train_val[split_idx:]
@@ -161,7 +162,7 @@ def noisy_wh(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
         save_train_valid: bool = True # save unsplitted train and valid datasets in 'train_valid' subdirectory
-):
+) -> None:
     'the wiener hammerstein dataset with process noise'
 
     #extract raw .mat files, to preserve filenames necessary for train, valid split
@@ -212,7 +213,7 @@ def ced(
         force_download: bool = False, # force download the dataset
         save_train_valid: bool = True, # save unsplitted train and valid datasets in 'train_valid' subdirectory
         split_idx: int = 300 # split index for train and valid datasets
-):
+) -> None:
     train_val, test = nonlinear_benchmarks.CED(force_download=force_download,always_return_tuples_of_datasets=True)
     train = tuple(x[:split_idx] for x in train_val)
     valid = tuple(x[split_idx:] for x in train_val)
@@ -220,7 +221,7 @@ def ced(
     dataset_to_hdf5(train,valid,test,save_path,train_valid=(train_val if save_train_valid else None))
 
 # %% ../../nbs/datasets/workshop.ipynb 49
-def evaluate_ced(results,spec):
+def evaluate_ced(results: list[tuple[np.ndarray, np.ndarray]], spec: idb.BenchmarkSpecBase) -> dict[str, float]:
     test_configs = [
         ('test_0.hdf5', 'test_1_rmse'),
         ('test_1.hdf5', 'test_2_rmse'),

@@ -6,8 +6,9 @@
 __all__ = ['BenchmarkSpecSimulation', 'BenchmarkSpecPrediction', 'TrainingContext', 'run_benchmark', 'run_multiple_benchmarks']
 
 # %% ../nbs/benchmark.ipynb 2
-from typing import List, Optional, Callable, Dict, Any, Iterator, Tuple, Union
 from pathlib import Path
+from collections.abc import Iterator, Callable
+from typing import Any
 import random
 import numpy as np
 import time
@@ -35,15 +36,15 @@ class BenchmarkSpecBase:
     def __init__(self,
                  name: str, # Unique name identifying this benchmark task.
                  dataset_id: str, # Identifier for the raw dataset source.
-                 u_cols: List[str], # List of column names for input signals (u).
-                 y_cols: List[str], # List of column names for output signals (y).
+                 u_cols: list[str], # list of column names for input signals (u).
+                 y_cols: list[str], # list of column names for output signals (y).
                  metric_func: Callable[[np.ndarray, np.ndarray], float], # Primary metric: `func(y_true, y_pred)`.
-                 x_cols: Optional[List[str]] = None, # Optional state inputs (x).
-                 sampling_time: Optional[float] = None, # Optional sampling time (seconds).
-                 download_func: Optional[Callable[[Path, bool], None]] = None, # Dataset preparation func.
-                 test_model_func: Callable[[BenchmarkSpecBase, Callable], Dict[str, Any]] = None,
+                 x_cols: list[str]|None = None, # Optional state inputs (x).
+                 sampling_time: float|None = None, # Optional sampling time (seconds).
+                 download_func: Callable[[Path, bool], None]|None = None, # Dataset preparation func.
+                 test_model_func: Callable[[BenchmarkSpecBase, Callable], dict[str, Any]] = None,
                  custom_test_evaluation = None, 
-                 init_window: Optional[int] = None, # Steps for warm-up, potentially ignored in evaluation.
+                 init_window: int|None = None, # Steps for warm-up, potentially ignored in evaluation.
                  data_root: [Path, Callable[[], Path]] = get_default_data_root # root dir for dataset, may be a callable or path
                 ):
         self.name = name
@@ -92,17 +93,17 @@ class BenchmarkSpecBase:
         return self.dataset_path / 'train_valid'
     
     @property
-    def train_files(self) -> List[Path]:
+    def train_files(self) -> list[Path]:
         """Returns the list of hdf5 files in the training directory."""
         return hdf_files_from_path(self.train_path)
     
     @property
-    def valid_files(self) -> List[Path]:
+    def valid_files(self) -> list[Path]:
         """Returns the list of hdf5 files in the validation directory."""
         return hdf_files_from_path(self.valid_path)
     
     @property
-    def train_valid_files(self) -> List[Path]:
+    def train_valid_files(self) -> list[Path]:
         """Returns the list of hdf5 files in the train_valid directory if it exists, otherwise returns the union of the train and valid directories."""
         train_valid_files = hdf_files_from_path(self.train_valid_path)
         if train_valid_files: 
@@ -113,7 +114,7 @@ class BenchmarkSpecBase:
             return sorted(train_files+valid_files)
 
     @property
-    def test_files(self) -> List[Path]:
+    def test_files(self) -> list[Path]:
         """Returns the list of hdf5 files in the test directory."""
         return hdf_files_from_path(self.test_path)
 
@@ -158,15 +159,15 @@ class BenchmarkSpecSimulation(BenchmarkSpecBase):
     def __init__(self,
                 name: str, # Unique name identifying this benchmark task.
                 dataset_id: str, # Identifier for the raw dataset source.
-                u_cols: List[str], # List of column names for input signals (u).
-                y_cols: List[str], # List of column names for output signals (y).
+                u_cols: list[str], # list of column names for input signals (u).
+                y_cols: list[str], # list of column names for output signals (y).
                 metric_func: Callable[[np.ndarray, np.ndarray], float], # Primary metric: `func(y_true, y_pred)`.
-                x_cols: Optional[List[str]] = None, # Optional state inputs (x).
-                sampling_time: Optional[float] = None, # Optional sampling time (seconds).
-                download_func: Optional[Callable[[Path, bool], None]] = None, # Dataset preparation func.
-                test_model_func: Callable[[BenchmarkSpecBase, Callable], Dict[str, Any]] = _test_simulation,
+                x_cols: list[str]|None = None, # Optional state inputs (x).
+                sampling_time: float|None = None, # Optional sampling time (seconds).
+                download_func: Callable[[Path, bool], None]|None = None, # Dataset preparation func.
+                test_model_func: Callable[[BenchmarkSpecBase, Callable], dict[str, Any]] = _test_simulation,
                 custom_test_evaluation = None, 
-                init_window: Optional[int] = None, # Steps for warm-up, potentially ignored in evaluation.
+                init_window: int|None = None, # Steps for warm-up, potentially ignored in evaluation.
                 data_root: [Path, Callable[[], Path]] = get_default_data_root # root dir for dataset, may be a callable or path
             ):
         self.name = name
@@ -207,17 +208,17 @@ class BenchmarkSpecPrediction(BenchmarkSpecBase):
      def __init__(self,
                name: str, # Unique name identifying this benchmark task.
                dataset_id: str, # Identifier for the raw dataset source.
-               u_cols: List[str], # List of column names for input signals (u).
-               y_cols: List[str], # List of column names for output signals (y).
+               u_cols: list[str], # list of column names for input signals (u).
+               y_cols: list[str], # list of column names for output signals (y).
                metric_func: Callable[[np.ndarray, np.ndarray], float], # Primary metric: `func(y_true, y_pred)`.
                pred_horizon: int, # The 'k' in k-step ahead prediction (mandatory for this type).
                pred_step: int, # Step size for k-step ahead prediction (e.g., predict y[t+k] using data up to t).
-               x_cols: Optional[List[str]] = None, # Optional state inputs (x).
-               sampling_time: Optional[float] = None, # Optional sampling time (seconds).
-               download_func: Optional[Callable[[Path, bool], None]] = None, # Dataset preparation func.
-               test_model_func: Callable[[BenchmarkSpecBase, Callable], Dict[str, Any]] = _test_prediction,
+               x_cols: list[str]|None = None, # Optional state inputs (x).
+               sampling_time: float|None = None, # Optional sampling time (seconds).
+               download_func: Callable[[Path, bool], None]|None = None, # Dataset preparation func.
+               test_model_func: Callable[[BenchmarkSpecBase, Callable], dict[str, Any]] = _test_prediction,
                custom_test_evaluation = None, 
-               init_window: Optional[int] = None, # Steps for warm-up, potentially ignored in evaluation.
+               init_window: int|None = None, # Steps for warm-up, potentially ignored in evaluation.
                data_root: [Path, Callable[[], Path]] = get_default_data_root # root dir for dataset, may be a callable or path
           ):
           if pred_horizon <= 0:
@@ -250,8 +251,8 @@ class TrainingContext:
     # Explicit __init__ for nbdev documentation compatibility
     def __init__(self, 
                  spec: BenchmarkSpecBase, # The benchmark specification.
-                 hyperparameters: Dict[str, Any], # User-provided dictionary containing model and training hyperparameters.
-                 seed: Optional[int] = None # Optional random seed for reproducibility.
+                 hyperparameters: dict[str, Any], # User-provided dictionary containing model and training hyperparameters.
+                 seed: int|None = None # Optional random seed for reproducibility.
                 ):
         # Standard attribute assignment
         self.spec = spec
@@ -260,7 +261,7 @@ class TrainingContext:
 
     # --- Data Access Methods ---
 
-    def get_train_sequences(self) -> Iterator[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]]:
+    def get_train_sequences(self) -> Iterator[tuple[np.ndarray, np.ndarray, np.ndarray|None]]:
         """Returns a lazy iterator yielding raw (u, y, x) tuples for the 'train' subset."""
         return _load_sequences_from_files(
             file_paths=self.spec.train_files,
@@ -269,7 +270,7 @@ class TrainingContext:
             x_cols=self.spec.x_cols,
         )
 
-    def get_valid_sequences(self) -> Iterator[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]]:
+    def get_valid_sequences(self) -> Iterator[tuple[np.ndarray, np.ndarray, np.ndarray|None]]:
         """Returns a lazy iterator yielding raw (u, y, x) tuples for the 'valid' subset."""
         return _load_sequences_from_files(
             file_paths=self.spec.valid_files,
@@ -278,7 +279,7 @@ class TrainingContext:
             x_cols=self.spec.x_cols,
         )
 
-    def get_train_valid_sequences(self) -> Iterator[Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]]:
+    def get_train_valid_sequences(self) -> Iterator[tuple[np.ndarray, np.ndarray, np.ndarray|None]]:
         """
         Returns a lazy iterator yielding raw (u, y, x) tuples for combined training and validation.
 
@@ -348,14 +349,14 @@ def _dummy_build_model(context):
         
     return dummy_model # Return the callable model
 
-# %% ../nbs/benchmark.ipynb 31
+# %% ../nbs/benchmark.ipynb 30
 def run_multiple_benchmarks(
-    specs: Union[List[BenchmarkSpecBase], Dict[str, BenchmarkSpecBase]], # Collection of specs to run
+    specs: list[BenchmarkSpecBase] | dict[str, BenchmarkSpecBase], # Collection of specs to run
     build_model: Callable[[TrainingContext], Callable], # User function to build the model/predictor
-    hyperparameters: Optional[Dict[str, Any]] = None, # Hyperparameters passed to build_model
-    seed: Optional[int] = None, # Base random seed
+    hyperparameters: dict[str, Any]|None = None, # Hyperparameters passed to build_model
+    seed: int|None = None, # Base random seed
     continue_on_error: bool = True, # If True, continue running benchmarks even if one fails
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """
     Runs multiple benchmarks sequentially using the same build_model function.
 
@@ -397,8 +398,7 @@ def run_multiple_benchmarks(
             print(f"  -> ERROR running benchmark '{spec_name}': {e}")
             if not continue_on_error:
                 print("Stopping due to error (continue_on_error=False).")
-                raise # Re-raise the exception to halt execution
-            # If continue_on_error is True, the loop continues automatically
+                raise 
 
     print(f"\n--- Benchmark run finished. {len(results_list)}/{len(spec_objects)} completed successfully. ---")
     return results_list
