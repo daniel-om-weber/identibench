@@ -1,6 +1,6 @@
 __version__ = "0.0.8"
 
-from .benchmark import run_benchmark, BenchmarkSpecSimulation, BenchmarkSpecPrediction, TrainingContext
+from .benchmark import run_benchmark,run_multiple_benchmarks, BenchmarkSpecSimulation, BenchmarkSpecPrediction, TrainingContext
 from . import metrics
 from . import datasets
 
