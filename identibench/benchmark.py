@@ -189,9 +189,9 @@ def _test_prediction(specs, model):
     for u_test, y_test, _ in _load_sequences_from_files(specs.test_files, specs.u_cols, specs.y_cols, specs.x_cols):
         #iterate through windows of u_test and y_test
         window_results = []
-        for i in range(0, u_test.shape[0] - specs.init_window, specs.pred_step):
-            u_test_win = u_test[i:i+specs.init_window]
-            y_test_win = y_test[i:i+specs.init_window]
+        for i in range(0, u_test.shape[0] - specs.init_window - specs.pred_horizon, specs.pred_step):
+            u_test_win = u_test[i:i+specs.init_window+specs.pred_horizon]
+            y_test_win = y_test[i:i+specs.init_window+specs.pred_horizon]
             y_pred = model(u_test_win,y_test_win[:specs.init_window])
             window_results.append((y_pred,y_test_win))
         results.append(window_results)

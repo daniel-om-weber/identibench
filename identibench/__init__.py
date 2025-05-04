@@ -1,4 +1,4 @@
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 from .benchmark import run_benchmark,run_multiple_benchmarks, BenchmarkSpecSimulation, BenchmarkSpecPrediction, TrainingContext
 from . import metrics
