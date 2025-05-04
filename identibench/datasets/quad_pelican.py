@@ -5,7 +5,7 @@
 # %% auto 0
 __all__ = ['pelican_u_motors', 'pelican_u_motors_cmd', 'pelican_y_euler', 'pelican_y_euler_rates', 'pelican_y_pos',
            'pelican_y_vel', 'pelican_y_rate', 'pelican_u', 'pelican_y', 'BenchmarkQuadPelican_Simulation',
-           'BenchmarkQuadPelican_Prediction', 'quad_pelican']
+           'BenchmarkQuadPelican_Prediction', 'dl_quad_pelican']
 
 # %% ../../nbs/datasets/quad_pelican.ipynb 2
 from nonlinear_benchmarks.utilities import cashed_download
@@ -87,7 +87,7 @@ def get_parent_dir(f_name: str # name of the flight
         return ValueError(f'Filename {f_name} not recognized!')
 
 # %% ../../nbs/datasets/quad_pelican.ipynb 4
-def quad_pelican(
+def dl_quad_pelican(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
         remove_download: bool = False
@@ -147,12 +147,12 @@ pelican_y = pelican_y_euler_rates+pelican_y_vel
 BenchmarkQuadPelican_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkQuadPelican_Simulation', dataset_id='quad_pelican',
     u_cols=pelican_u, y_cols=pelican_y, metric_func=identibench.metrics.rmse, 
-    download_func=quad_pelican,
+    download_func=dl_quad_pelican,
     init_window=100
 )
 BenchmarkQuadPelican_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkQuadPelican_Prediction', dataset_id='quad_pelican',
     u_cols=pelican_u, y_cols=pelican_y, metric_func=identibench.metrics.rmse, 
-    download_func=quad_pelican,
+    download_func=dl_quad_pelican,
     init_window=100, pred_horizon=100,pred_step=100
 )

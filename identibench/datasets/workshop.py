@@ -6,8 +6,8 @@
 __all__ = ['BenchmarkWH_Simulation', 'BenchmarkWH_Prediction', 'BenchmarkSilverbox_Simulation', 'BenchmarkSilverbox_Prediction',
            'BenchmarkCascadedTanks_Simulation', 'BenchmarkCascadedTanks_Prediction', 'BenchmarkEMPS_Simulation',
            'BenchmarkEMPS_Prediction', 'BenchmarkNoisyWH_Simulation', 'BenchmarkNoisyWH_Prediction',
-           'BenchmarkCED_Simulation', 'BenchmarkCED_Prediction', 'wiener_hammerstein', 'silverbox', 'cascaded_tanks',
-           'emps', 'noisy_wh', 'ced']
+           'BenchmarkCED_Simulation', 'BenchmarkCED_Prediction', 'dl_wiener_hammerstein', 'dl_silverbox',
+           'dl_cascaded_tanks', 'dl_emps', 'dl_noisy_wh', 'dl_ced']
 
 # %% ../../nbs/datasets/workshop.ipynb 2
 from ..utils import *
@@ -20,7 +20,7 @@ from pathlib import Path
 import shutil
 
 # %% ../../nbs/datasets/workshop.ipynb 7
-def wiener_hammerstein(
+def dl_wiener_hammerstein(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
         save_train_valid: bool = True, # save unsplitted train and valid datasets in 'train_valid' subdirectory
@@ -41,19 +41,19 @@ BenchmarkWH_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkWH_Simulation', dataset_id='wh',
     u_cols=['u0'], y_cols=['y0'], 
     metric_func=rmse_mV, 
-    download_func=wiener_hammerstein,
+    download_func=dl_wiener_hammerstein,
     init_window=50
 )
 BenchmarkWH_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkWH_Prediction', dataset_id='wh',
     u_cols=['u0'], y_cols=['y0'], 
     metric_func=rmse_mV, 
-    download_func=wiener_hammerstein,
+    download_func=dl_wiener_hammerstein,
     init_window=50, pred_horizon=100, pred_step=100
 )
 
 # %% ../../nbs/datasets/workshop.ipynb 15
-def silverbox(
+def dl_silverbox(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
         save_train_valid: bool = True, # save unsplitted train and valid datasets in 'train_valid' subdirectory
@@ -89,7 +89,7 @@ BenchmarkSilverbox_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkSilverbox_Simulation', dataset_id='silverbox',
     u_cols=['u0'], y_cols=['y0'], 
     metric_func=rmse_mV, 
-    download_func=silverbox,
+    download_func=dl_silverbox,
     custom_test_evaluation=evaluate_silverbox,
     init_window=50
 )
@@ -97,13 +97,13 @@ BenchmarkSilverbox_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkSilverbox_Prediction', dataset_id='silverbox',
     u_cols=['u0'], y_cols=['y0'], 
     metric_func=rmse_mV, 
-    download_func=silverbox,
+    download_func=dl_silverbox,
     custom_test_evaluation=evaluate_silverbox,
     init_window=50, pred_horizon=100, pred_step=100
 )
 
 # %% ../../nbs/datasets/workshop.ipynb 23
-def cascaded_tanks(
+def dl_cascaded_tanks(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
         save_train_valid: bool = True, # save unsplitted train and valid datasets in 'train_valid' subdirectory
@@ -119,18 +119,18 @@ def cascaded_tanks(
 BenchmarkCascadedTanks_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkCascadedTanks_Simulation', dataset_id='cascaded_tanks',
     u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
-    download_func=cascaded_tanks,
+    download_func=dl_cascaded_tanks,
     init_window=50
 )
 BenchmarkCascadedTanks_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkCascadedTanks_Prediction', dataset_id='cascaded_tanks',
     u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
-    download_func=cascaded_tanks,
+    download_func=dl_cascaded_tanks,
     init_window=50, pred_horizon=100, pred_step=100
 )
 
 # %% ../../nbs/datasets/workshop.ipynb 30
-def emps(
+def dl_emps(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
         save_train_valid: bool = True, # save unsplitted train and valid datasets in 'train_valid' subdirectory
@@ -146,19 +146,19 @@ def emps(
 BenchmarkEMPS_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkEMPS_Simulation', dataset_id='emps',
     u_cols=['u0'], y_cols=['y0'], metric_func=rmse_mV, 
-    download_func=emps,
+    download_func=dl_emps,
     init_window=20
 )
 BenchmarkEMPS_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkEMPS_Prediction', dataset_id='emps',
     u_cols=['u0'], y_cols=['y0'], metric_func=rmse_mV, 
-    download_func=emps,
+    download_func=dl_emps,
     init_window=20, pred_horizon=100, pred_step=100
 )
 
 # %% ../../nbs/datasets/workshop.ipynb 36
 from scipy.io import loadmat
-def noisy_wh(
+def dl_noisy_wh(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
         save_train_valid: bool = True # save unsplitted train and valid datasets in 'train_valid' subdirectory
@@ -197,18 +197,18 @@ def noisy_wh(
 BenchmarkNoisyWH_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkNoisyWH_Simulation', dataset_id='noisy_wh',
     u_cols=['u0'], y_cols=['y0'], metric_func=rmse_mV, 
-    download_func=noisy_wh,
+    download_func=dl_noisy_wh,
     init_window=100
 )
 BenchmarkNoisyWH_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkNoisyWH_Prediction', dataset_id='noisy_wh',
     u_cols=['u0'], y_cols=['y0'], metric_func=rmse_mV, 
-    download_func=noisy_wh,
+    download_func=dl_noisy_wh,
     init_window=100, pred_horizon=100, pred_step=100
 )
 
 # %% ../../nbs/datasets/workshop.ipynb 47
-def ced(
+def dl_ced(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
         save_train_valid: bool = True, # save unsplitted train and valid datasets in 'train_valid' subdirectory
@@ -241,14 +241,14 @@ def evaluate_ced(results: list[tuple[np.ndarray, np.ndarray]], spec: idb.Benchma
 BenchmarkCED_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkCED_Simulation', dataset_id='ced',
     u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
-    download_func=ced,
+    download_func=dl_ced,
     custom_test_evaluation=evaluate_ced,
     init_window=10
 )
 BenchmarkCED_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkCED_Prediction', dataset_id='ced',
     u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
-    download_func=ced,
+    download_func=dl_ced,
     custom_test_evaluation=evaluate_ced,
     init_window=10, pred_horizon=100, pred_step=100
 )

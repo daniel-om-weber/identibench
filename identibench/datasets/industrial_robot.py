@@ -4,8 +4,8 @@
 
 # %% auto 0
 __all__ = ['u_forward', 'y_forward', 'BenchmarkRobotForward_Simulation', 'BenchmarkRobotForward_Prediction', 'u_inverse',
-           'y_inverse', 'BenchmarkRobotInverse_Simulation', 'BenchmarkRobotInverse_Prediction', 'robot_forward',
-           'robot_inverse']
+           'y_inverse', 'BenchmarkRobotInverse_Simulation', 'BenchmarkRobotInverse_Prediction', 'dl_robot_forward',
+           'dl_robot_inverse']
 
 # %% ../../nbs/datasets/industrial_robot.ipynb 2
 from ..utils import write_dataset,write_array
@@ -60,7 +60,7 @@ def robot_mat2hdf(
     
 
 # %% ../../nbs/datasets/industrial_robot.ipynb 4
-def robot_forward(
+def dl_robot_forward(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False # force download the dataset
 ) -> None:
@@ -83,18 +83,18 @@ y_forward = [ f'y{i}' for i in range(0,6) ]
 BenchmarkRobotForward_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkRobotForward_Simulation', dataset_id='robot_forward',
     u_cols=u_forward, y_cols=y_forward, metric_func=identibench.metrics.rmse, 
-    download_func=robot_forward,
+    download_func=dl_robot_forward,
     init_window=100
 )
 BenchmarkRobotForward_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkRobotForward_Prediction', dataset_id='robot_forward',
     u_cols=u_forward, y_cols=y_forward, metric_func=identibench.metrics.rmse, 
-    download_func=robot_forward,
+    download_func=dl_robot_forward,
     init_window=100, pred_horizon=100,pred_step=100
 )
 
 # %% ../../nbs/datasets/industrial_robot.ipynb 9
-def robot_inverse(
+def dl_robot_inverse(
         save_path: Path, #directory the files are written to, created if it does not exist
         force_download: bool = False # force download the dataset
 ) -> None:
@@ -117,12 +117,12 @@ y_inverse = [ f'y{i}' for i in range(0,6) ]
 BenchmarkRobotInverse_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkRobotInverse_Simulation', dataset_id='robot_inverse',
     u_cols=u_inverse, y_cols=y_inverse, metric_func=identibench.metrics.rmse, 
-    download_func=robot_inverse,
+    download_func=dl_robot_inverse,
     init_window=100
 )
 BenchmarkRobotInverse_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkRobotInverse_Prediction', dataset_id='robot_inverse',
     u_cols=u_inverse, y_cols=y_inverse, metric_func=identibench.metrics.rmse, 
-    download_func=robot_inverse,
+    download_func=dl_robot_inverse,
     init_window=100, pred_horizon=100,pred_step=100
 )

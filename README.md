@@ -76,7 +76,7 @@ from pathlib import Path
 # Example: Download a single dataset
 # Note: Always use a Path object, not a string
 save_path = Path('./tmp/wh')
-idb.datasets.workshop.wiener_hammerstein(save_path)
+idb.datasets.workshop.dl_wiener_hammerstein(save_path)
 ```
 
 ``` python

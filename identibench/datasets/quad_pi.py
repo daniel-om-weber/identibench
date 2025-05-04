@@ -4,7 +4,7 @@
 
 # %% auto 0
 __all__ = ['quad_pi_u', 'quad_pi_x_v', 'quad_pi_x_q', 'quad_pi_x_w', 'quad_pi_x', 'quad_pi_y_vdot', 'quad_pi_y_wdot', 'quad_pi_y',
-           'BenchmarkQuadPi_Simulation', 'BenchmarkQuadPi_Prediction', 'quad_pi']
+           'BenchmarkQuadPi_Simulation', 'BenchmarkQuadPi_Prediction', 'dl_quad_pi']
 
 # %% ../../nbs/datasets/quadrotor_pi.ipynb 2
 from nonlinear_benchmarks.utilities import get_tmp_benchmark_directory
@@ -291,7 +291,7 @@ def extract_hdf_from_bag(bag_path,save_path):
             f.create_dataset(col, data=df[col].values, dtype='f4')
 
 # %% ../../nbs/datasets/quadrotor_pi.ipynb 5
-def quad_pi(
+def dl_quad_pi(
         save_path: Path, # directory the files are written to, created if it does not exist
         force_download: bool = False, # force download the dataset
         remove_download: bool = False # remove downloaded zip/extracted bags afterwards
@@ -337,12 +337,12 @@ quad_pi_y = quad_pi_y_vdot + quad_pi_y_wdot
 BenchmarkQuadPi_Simulation = idb.BenchmarkSpecSimulation(
     name='BenchmarkQuadPi_Simulation', dataset_id='quad_pi',
     u_cols=quad_pi_u, y_cols=quad_pi_y, metric_func=identibench.metrics.rmse, 
-    download_func=quad_pi,
+    download_func=dl_quad_pi,
     init_window=100
 )
 BenchmarkQuadPi_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkQuadPi_Prediction', dataset_id='quad_pi',
     u_cols=quad_pi_u, y_cols=quad_pi_y, metric_func=identibench.metrics.rmse, 
-    download_func=quad_pi,
+    download_func=dl_quad_pi,
     init_window=100, pred_horizon=100,pred_step=100
 )
