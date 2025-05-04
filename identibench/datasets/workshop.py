@@ -250,5 +250,5 @@ BenchmarkCED_Prediction = idb.BenchmarkSpecPrediction(
     u_cols=['u0'], y_cols=['y0'], metric_func=identibench.metrics.rmse, 
     download_func=dl_ced,
     custom_test_evaluation=evaluate_ced,
-    init_window=10, pred_horizon=100, pred_step=100
+    init_window=10, pred_horizon=30, pred_step=30
 )
