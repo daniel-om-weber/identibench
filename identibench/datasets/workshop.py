@@ -153,7 +153,7 @@ BenchmarkEMPS_Prediction = idb.BenchmarkSpecPrediction(
     name='BenchmarkEMPS_Prediction', dataset_id='emps',
     u_cols=['u0'], y_cols=['y0'], metric_func=rmse_mV, 
     download_func=dl_emps,
-    init_window=20, pred_horizon=100, pred_step=100
+    init_window=20, pred_horizon=500, pred_step=100
 )
 
 # %% ../../nbs/datasets/workshop.ipynb 36

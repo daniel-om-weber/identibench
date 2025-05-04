@@ -1,4 +1,4 @@
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 
 from .benchmark import run_benchmark,run_multiple_benchmarks, BenchmarkSpecSimulation, BenchmarkSpecPrediction, TrainingContext
 from . import metrics
@@ -10,7 +10,8 @@ from .datasets.workshop import (
     BenchmarkSilverbox_Simulation, BenchmarkSilverbox_Prediction,
     BenchmarkCascadedTanks_Simulation, BenchmarkCascadedTanks_Prediction,
     BenchmarkEMPS_Simulation, BenchmarkEMPS_Prediction,
-    BenchmarkNoisyWH_Simulation, BenchmarkNoisyWH_Prediction
+    BenchmarkNoisyWH_Simulation, BenchmarkNoisyWH_Prediction,
+    BenchmarkCED_Simulation, BenchmarkCED_Prediction
 )
 # Robot Benchmarks
 from .datasets.industrial_robot import (
@@ -52,3 +53,10 @@ prediction_benchmarks = {
 }
 
 all_benchmarks = {**simulation_benchmarks, **prediction_benchmarks}
+
+workshop_benchmarks = {
+    'WH_Sim': BenchmarkWH_Simulation,
+    'Silverbox_Sim': BenchmarkSilverbox_Simulation,
+    'EMPS_Sim': BenchmarkEMPS_Simulation,
+    'CED_Sim': BenchmarkCED_Simulation,
+}
