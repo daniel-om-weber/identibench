@@ -1,6 +1,6 @@
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
-from .benchmark import run_benchmark,run_multiple_benchmarks, BenchmarkSpecSimulation, BenchmarkSpecPrediction, TrainingContext
+from .benchmark import run_benchmark,run_benchmarks, BenchmarkSpecSimulation, BenchmarkSpecPrediction, TrainingContext, benchmark_results_to_dataframe, aggregate_benchmark_results
 from . import metrics
 from . import datasets
 

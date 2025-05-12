@@ -124,6 +124,7 @@ results = idb.run_benchmark(
 | `WH_Sim`           | BenchmarkWH_Simulation            |
 | `Silverbox_Sim`    | BenchmarkSilverbox_Simulation     |
 | `Tanks_Sim`        | BenchmarkCascadedTanks_Simulation |
+| `CED_Sim`          | BenchmarkCED_Simulation           |
 | `EMPS_Sim`         | BenchmarkEMPS_Simulation          |
 | `NoisyWH_Sim`      | BenchmarkNoisyWH_Simulation       |
 | `RobotForward_Sim` | BenchmarkRobotForward_Simulation  |
@@ -139,6 +140,7 @@ results = idb.run_benchmark(
 | `WH_Pred`           | BenchmarkWH_Prediction            |
 | `Silverbox_Pred`    | BenchmarkSilverbox_Prediction     |
 | `Tanks_Pred`        | BenchmarkCascadedTanks_Prediction |
+| `CED_Pred`          | BenchmarkCED_Prediction           |
 | `EMPS_Pred`         | BenchmarkEMPS_Prediction          |
 | `NoisyWH_Pred`      | BenchmarkNoisyWH_Prediction       |
 | `RobotForward_Pred` | BenchmarkRobotForward_Prediction  |
@@ -227,36 +229,107 @@ you provide to
 ### Running Multiple Benchmarks
 
 To evaluate a model across several scenarios efficiently, use the
-[`run_multiple_benchmarks`](https://daniel-om-weber.github.io/identibench/benchmark.html#run_multiple_benchmarks)
-function:
+`run_multiple_benchmarks` function:
 
 ``` python
 # Example: Run on a subset of benchmarks
 specs_to_run = {
     'WH_Sim': idb.simulation_benchmarks['WH_Sim'],
-    'Tanks_Pred': idb.prediction_benchmarks['Tanks_Pred']
+    'Silverbox_Sim': idb.simulation_benchmarks['Silverbox_Sim']
 }
 
 # Assume 'my_build_model' is your defined build function
-all_results = idb.run_multiple_benchmarks(specs_to_run, build_model=build_frols_model)
+all_results = idb.run_benchmarks(specs_to_run, build_model=build_frols_model,n_times=3)
 
-# all_results is a list of result dictionaries, one for each spec run
+all_results
 ```
 
-    --- Starting benchmark run for 2 specifications ---
+    --- Starting benchmark run for 2 specifications, repeating each 3 times ---
 
-    [1/2] Running benchmark: BenchmarkWH_Simulation
-      -> Success: BenchmarkWH_Simulation completed.
+    -- Repetition 1/3 --
 
-    [2/2] Running benchmark: BenchmarkCascadedTanks_Prediction
-      -> ERROR running benchmark 'BenchmarkCascadedTanks_Prediction': Input shapes must match. Got (45, 1) and (50, 1)
+    [1/6] Running: BenchmarkWH_Simulation (Rep 1)
+      -> Success: BenchmarkWH_Simulation (Rep 1) completed.
 
-    --- Benchmark run finished. 1/2 completed successfully. ---
+    [2/6] Running: BenchmarkSilverbox_Simulation (Rep 1)
+      -> Success: BenchmarkSilverbox_Simulation (Rep 1) completed.
+
+    -- Repetition 2/3 --
+
+    [3/6] Running: BenchmarkWH_Simulation (Rep 2)
+      -> Success: BenchmarkWH_Simulation (Rep 2) completed.
+
+    [4/6] Running: BenchmarkSilverbox_Simulation (Rep 2)
+      -> Success: BenchmarkSilverbox_Simulation (Rep 2) completed.
+
+    -- Repetition 3/3 --
+
+    [5/6] Running: BenchmarkWH_Simulation (Rep 3)
+      -> Success: BenchmarkWH_Simulation (Rep 3) completed.
+
+    [6/6] Running: BenchmarkSilverbox_Simulation (Rep 3)
+      -> Success: BenchmarkSilverbox_Simulation (Rep 3) completed.
+
+    --- Benchmark run finished. 6/6 individual runs completed successfully. ---
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+&#10;    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+&#10;    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+
+|  | benchmark_name | dataset_id | hyperparameters | seed | training_time_seconds | test_time_seconds | benchmark_type | metric_name | metric_score | cs_multisine_rmse | cs_arrow_full_rmse | cs_arrow_no_extrapolation_rmse |
+|----|----|----|----|----|----|----|----|----|----|----|----|----|
+| 0 | BenchmarkWH_Simulation | wh | {} | 2406651230 | 4.944649 | 1.012850 | BenchmarkSpecSimulation | rmse_mV | 42.161572 | NaN | NaN | NaN |
+| 1 | BenchmarkSilverbox_Simulation | silverbox | {} | 3813113752 | 2.839149 | 1.246224 | BenchmarkSpecSimulation | rmse_mV | 10.732386 | 8.501941 | 16.154317 | 7.5409 |
+| 2 | BenchmarkWH_Simulation | wh | {} | 1950649438 | 4.801520 | 1.034119 | BenchmarkSpecSimulation | rmse_mV | 42.161572 | NaN | NaN | NaN |
+| 3 | BenchmarkSilverbox_Simulation | silverbox | {} | 1560698088 | 2.880391 | 1.217932 | BenchmarkSpecSimulation | rmse_mV | 10.732386 | 8.501941 | 16.154317 | 7.5409 |
+| 4 | BenchmarkWH_Simulation | wh | {} | 3258007268 | 4.916941 | 1.021927 | BenchmarkSpecSimulation | rmse_mV | 42.161572 | NaN | NaN | NaN |
+| 5 | BenchmarkSilverbox_Simulation | silverbox | {} | 4194043971 | 2.937101 | 1.231710 | BenchmarkSpecSimulation | rmse_mV | 10.732386 | 8.501941 | 16.154317 | 7.5409 |
+
+</div>
 
 This function iterates through the provided list or dictionary of
 benchmark specifications, calling
 [`run_benchmark`](https://daniel-om-weber.github.io/identibench/benchmark.html#run_benchmark)
 for each one using the same `build_model` function and hyperparameters.
+
+``` python
+#calculate mean and std of the results
+idb.aggregate_benchmark_results(all_results,agg_funcs=['mean','std'])
+```
+
+<div>
+<style scoped>
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+&#10;    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+&#10;    .dataframe thead tr th {
+        text-align: left;
+    }
+&#10;    .dataframe thead tr:last-of-type th {
+        text-align: right;
+    }
+</style>
+
+|  | training_time_seconds |  | test_time_seconds |  | metric_score |  | cs_multisine_rmse |  | cs_arrow_full_rmse |  | cs_arrow_no_extrapolation_rmse |  |
+|----|----|----|----|----|----|----|----|----|----|----|----|----|
+|  | mean | std | mean | std | mean | std | mean | std | mean | std | mean | std |
+| benchmark_name |  |  |  |  |  |  |  |  |  |  |  |  |
+| BenchmarkSilverbox_Simulation | 2.885547 | 0.049179 | 1.231955 | 0.014147 | 10.732386 | 0.0 | 8.501941 | 0.0 | 16.154317 | 0.0 | 7.5409 | 0.0 |
+| BenchmarkWH_Simulation | 4.887703 | 0.075912 | 1.022966 | 0.010673 | 42.161572 | 0.0 | NaN | NaN | NaN | NaN | NaN | NaN |
+
+</div>
 
 ### Data Handling & Format
 
