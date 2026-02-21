@@ -67,7 +67,8 @@ class TestNRMSE:
         np.testing.assert_allclose(nrmse(data_2d['y_true'], data_2d['y_offset'], time_axis=0), expected, atol=1e-10)
 
     def test_zero_std_returns_nan(self, data_const):
-        result = nrmse(data_const['y_true'], data_const['y_err'])
+        with pytest.warns(RuntimeWarning, match="Standard deviation of y_true is below tolerance"):
+            result = nrmse(data_const['y_true'], data_const['y_err'])
         assert np.isnan(result).all()
 
 
@@ -87,7 +88,8 @@ class TestFitIndex:
         np.testing.assert_allclose(fit_index(data_2d['y_true'], data_2d['y_offset'], time_axis=0), expected, atol=1e-10)
 
     def test_zero_std_returns_nan(self, data_const):
-        result = fit_index(data_const['y_true'], data_const['y_err'])
+        with pytest.warns(RuntimeWarning, match="Standard deviation of y_true is below tolerance"):
+            result = fit_index(data_const['y_true'], data_const['y_err'])
         assert np.isnan(result).all()
 
 
@@ -137,5 +139,6 @@ class TestRSquared:
         np.testing.assert_allclose(r_squared(data_2d['y_true'], data_2d['y_offset'], time_axis=0), expected, atol=1e-10)
 
     def test_zero_std_returns_nan(self, data_const):
-        result = r_squared(data_const['y_true'], data_const['y_err'])
+        with pytest.warns(RuntimeWarning, match="Standard deviation of y_true is below tolerance"):
+            result = r_squared(data_const['y_true'], data_const['y_err'])
         assert np.isnan(result).all()
