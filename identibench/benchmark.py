@@ -11,6 +11,7 @@ from pathlib import Path
 from collections.abc import Iterator, Callable
 from typing import Any
 import random
+import multiprocessing
 import numpy as np
 import pandas as pd
 import time
@@ -121,8 +122,11 @@ class BenchmarkSpecBase:
         return hdf_files_from_path(self.test_path)
 
     def ensure_dataset_exists(self, force_download: bool = False) -> None:
-        """Checks if the dataset exists, downloads/prepares it if needed."""
-        # (Implementation remains the same as before)
+        """Checks if the dataset exists, downloads/prepares it if needed.
+        
+        Downloads are run in a subprocess to isolate side effects from problematic
+        dependencies (e.g., nest_asyncio, rospy) that can corrupt the parent process.
+        """
         dataset_path = self.dataset_path
         if self.download_func is None:
             print(f"Warning: No download function for '{self.name}'. Assuming data exists at {dataset_path}")
@@ -133,12 +137,18 @@ class BenchmarkSpecBase:
         if not dataset_path.is_dir() or force_download:
             print(f"Preparing dataset for '{self.name}' at {dataset_path}...")
             self.data_root.mkdir(parents=True, exist_ok=True)
-            try:
-                self.download_func(dataset_path, force_download)
-                print(f"Dataset '{self.name}' prepared successfully.")
-            except Exception as e:
-                print(f"Error preparing dataset '{self.name}': {e}")
-                raise
+            ctx = multiprocessing.get_context("spawn")
+            p = ctx.Process(
+                target=self.download_func,
+                args=(dataset_path, force_download),
+            )
+            p.start()
+            p.join()
+            if p.exitcode != 0:
+                raise RuntimeError(
+                    f"Download for '{self.name}' failed (exit code {p.exitcode})"
+                )
+            print(f"Dataset '{self.name}' prepared successfully.")
 
 # %% ../nbs/benchmark.ipynb 7
 def _test_simulation(specs, model):
