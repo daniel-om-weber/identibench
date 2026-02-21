@@ -52,6 +52,7 @@ packages = ["identibench"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["slow: marks tests that download real data (deselect with '-m \"not slow\"')"]
 
 [tool.ruff]
 line-length = 120
