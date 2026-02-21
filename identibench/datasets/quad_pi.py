@@ -23,8 +23,6 @@ import h5py
 import numpy as np
 import pandas as pd
 
-import gdown
-import bagpy
 import glob
 import scipy
 import shutil
@@ -48,6 +46,8 @@ def get_parent_dir(
 
 
 def parseBag(topic, path):
+    import bagpy
+
     bag = bagpy.bagreader(path, verbose=False)
     return pd.read_csv(bag.message_by_topic(topic))
 
@@ -324,6 +324,8 @@ def dl_quad_pi(
 
     if force_download and zip_target_path.is_file():
         os.remove(zip_target_path)  # Remove existing file to force re-download
+
+    import gdown
 
     gdown.cached_download(url, str(zip_target_path), postprocess=gdown.extractall, fuzzy=True)
 

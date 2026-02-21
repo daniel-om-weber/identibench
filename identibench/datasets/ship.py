@@ -9,7 +9,6 @@ from pathlib import Path
 import os
 import h5py
 import numpy as np
-from easyDataverse import Dataverse
 import pandas as pd
 import shutil
 
@@ -25,6 +24,8 @@ def dl_ship(
     if force_download and download_dir.exists():
         print(f"Force reload: Removing existing directory: {download_dir}")
         shutil.rmtree(download_dir)
+
+    from easyDataverse import Dataverse
 
     dataverse = Dataverse("https://darus.uni-stuttgart.de/")
     dataverse.load_dataset(
