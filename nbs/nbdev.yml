@@ -1,9 +1,0 @@
-project:
-  output-dir: _docs
-
-website:
-  title: "identibench"
-  site-url: "https://daniel-om-weber.github.io/identibench"
-  description: "Downloads and prepares various system identification benchmark datasets"
-  repo-branch: main
-  repo-url: "https://github.com/daniel-om-weber/identibench"

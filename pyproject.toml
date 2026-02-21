@@ -1,15 +1,60 @@
 [build-system]
-requires = ["setuptools>=64.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
-name="identibench"
-requires-python=">=3.9"
-dynamic = [ "keywords", "description", "version", "dependencies", "optional-dependencies", "readme", "license", "authors", "classifiers", "entry-points", "scripts", "urls"]
+name = "identibench"
+dynamic = ["version"]
+description = "Downloads and prepares various system identification benchmark datasets"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "Apache-2.0"}
+authors = [{name = "Daniel Oliver Martin Weber", email = "daniel.om.weber@gmail.com"}]
+keywords = ["system-identification", "benchmarks", "datasets", "time-series"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+dependencies = [
+    "nonlinear-benchmarks",
+    "h5py",
+    "easyDataverse>=0.4.4",
+    "pandas",
+    "gdown",
+    "bagpy",
+    "numpy",
+]
 
-[tool.uv]
-cache-keys = [{ file = "pyproject.toml" }, { file = "settings.ini" }, { file = "setup.py" }]
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "ruff",
+    "ipykernel",
+    "twine",
+]
 
+[project.urls]
+Repository = "https://github.com/daniel-om-weber/identibench"
+
+[tool.hatch.version]
+path = "identibench/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["identibench"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
-ignore = ["F403","F405","E702","E701"]
+line-length = 120
+
+[tool.ruff.lint]
+ignore = ["F401", "F403", "F405", "F811", "E401", "E402", "E701", "E702", "E731"]
