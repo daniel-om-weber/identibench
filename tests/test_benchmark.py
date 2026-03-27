@@ -277,7 +277,7 @@ class TestSimulation:
         # We need to verify structure, not perfection — that requires knowing y_test
         results = _test_simulation(sim_spec, perfect_model)
         for y_pred, y_test in results:
-            score = rmse(y_test, y_pred)
+            score = rmse(y_pred, y_test)
             assert np.isfinite(score)
 
 

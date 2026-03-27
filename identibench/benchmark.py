@@ -24,7 +24,7 @@ from .utils import get_default_data_root, _load_sequences_from_files, hdf_files_
 def aggregate_metric_score(
     test_results, metric_func, score_name=None, sequence_aggregation_func=np.mean, window_aggregation_func=np.mean
 ):
-    # iterate over test_results and calculate metric score for each (y_pred,y_test) tuple, if prediction, iterate over nested tuples with nested loop
+    # iterate over test_results and calculate metric score for each (y_pred, y_true) tuple, if prediction, iterate over nested tuples with nested loop
     if score_name is None:
         score_name = metric_func.__name__
     if isinstance(test_results[0], list):

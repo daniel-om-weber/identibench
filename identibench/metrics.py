@@ -7,28 +7,28 @@ import warnings
 
 
 def rmse(
-    y_true: np.ndarray,  # Ground truth target values.
-    y_pred: np.ndarray,  # Estimated target values.
+    inp: np.ndarray,  # Predicted / estimated values.
+    targ: np.ndarray,  # Ground truth target values.
     time_axis: int = 0,  # Axis representing time or samples.
 ) -> np.ndarray:  # Root Mean Squared Error for each channel.
     """
     Computes the Root Mean Square Error (RMSE) along a specified time axis.
 
-    Calculates RMSE = sqrt(mean((y_pred - y_true)**2)) separately for each channel
+    Calculates RMSE = sqrt(mean((inp - targ)**2)) separately for each channel
     defined by the remaining axes.
     """
-    y_true = np.asarray(y_true)
-    y_pred = np.asarray(y_pred)
-    if y_true.shape != y_pred.shape:
-        raise ValueError(f"Input shapes must match. Got {y_true.shape} and {y_pred.shape}")
+    inp = np.asarray(inp)
+    targ = np.asarray(targ)
+    if inp.shape != targ.shape:
+        raise ValueError(f"Input shapes must match. Got {inp.shape} and {targ.shape}")
 
     # Ensure time_axis is valid
-    if not (0 <= time_axis < y_true.ndim):
-        raise ValueError(f"Invalid time_axis {time_axis} for array with {y_true.ndim} dimensions")
+    if not (0 <= time_axis < inp.ndim):
+        raise ValueError(f"Invalid time_axis {time_axis} for array with {inp.ndim} dimensions")
 
     # Calculate RMSE
     try:
-        rmse_val = np.sqrt(np.mean((y_pred - y_true) ** 2, axis=time_axis))
+        rmse_val = np.sqrt(np.mean((inp - targ) ** 2, axis=time_axis))
     except FloatingPointError as e:
         warnings.warn(f"Floating point error during RMSE calculation: {e}. Check for NaNs or Infs.", RuntimeWarning)
         raise e
@@ -36,34 +36,34 @@ def rmse(
 
 
 def nrmse(
-    y_true: np.ndarray,  # Ground truth target values.
-    y_pred: np.ndarray,  # Estimated target values.
+    inp: np.ndarray,  # Predicted / estimated values.
+    targ: np.ndarray,  # Ground truth target values.
     time_axis: int = 0,  # Axis representing time or samples.
-    std_tolerance: float = 1e-9,  # Minimum standard deviation allowed for y_true to avoid division by zero.
+    std_tolerance: float = 1e-9,  # Minimum standard deviation allowed for targ to avoid division by zero.
 ) -> np.ndarray:  # Normalized Root Mean Squared Error for each channel.
     """
     Computes the Normalized Root Mean Square Error (NRMSE).
 
-    Calculates NRMSE = RMSE / std(y_true) separately for each channel.
-    Returns NaN for channels where std(y_true) is close to zero (below std_tolerance).
+    Calculates NRMSE = RMSE / std(targ) separately for each channel.
+    Returns NaN for channels where std(targ) is close to zero (below std_tolerance).
     """
-    rmse_val = rmse(y_true, y_pred, time_axis=time_axis)
-    std_true = np.std(y_true, axis=time_axis)
+    rmse_val = rmse(inp, targ, time_axis=time_axis)
+    std_targ = np.std(targ, axis=time_axis)
 
     # Initialize nrmse_val with NaNs or another placeholder
-    nrmse_val = np.full_like(std_true, fill_value=np.nan, dtype=np.float64)
+    nrmse_val = np.full_like(std_targ, fill_value=np.nan, dtype=np.float64)
 
     # Identify channels with standard deviation above the tolerance
-    valid_std_mask = std_true > std_tolerance
+    valid_std_mask = std_targ > std_tolerance
 
     # Calculate NRMSE only for valid channels
     if np.any(valid_std_mask):
-        nrmse_val[valid_std_mask] = rmse_val[valid_std_mask] / std_true[valid_std_mask]
+        nrmse_val[valid_std_mask] = rmse_val[valid_std_mask] / std_targ[valid_std_mask]
 
     # Warn if any channels had std below tolerance
     if not np.all(valid_std_mask):
         warnings.warn(
-            f"Standard deviation of y_true is below tolerance ({std_tolerance}) for some channels. NRMSE set to NaN for these channels.",
+            f"Standard deviation of targ is below tolerance ({std_tolerance}) for some channels. NRMSE set to NaN for these channels.",
             RuntimeWarning,
         )
 
@@ -71,18 +71,18 @@ def nrmse(
 
 
 def fit_index(
-    y_true: np.ndarray,  # Ground truth target values.
-    y_pred: np.ndarray,  # Estimated target values.
+    inp: np.ndarray,  # Predicted / estimated values.
+    targ: np.ndarray,  # Ground truth target values.
     time_axis: int = 0,  # Axis representing time or samples.
-    std_tolerance: float = 1e-9,  # Minimum standard deviation allowed for y_true.
+    std_tolerance: float = 1e-9,  # Minimum standard deviation allowed for targ.
 ) -> np.ndarray:  # Fit index (in percent) for each channel.
     """
     Computes the Fit Index (FIT) commonly used in System Identification.
 
     Calculates FIT = 100 * (1 - NRMSE) separately for each channel.
-    Returns NaN for channels where NRMSE could not be calculated (e.g., std(y_true) near zero).
+    Returns NaN for channels where NRMSE could not be calculated (e.g., std(targ) near zero).
     """
-    nrmse_val = nrmse(y_true, y_pred, time_axis=time_axis, std_tolerance=std_tolerance)
+    nrmse_val = nrmse(inp, targ, time_axis=time_axis, std_tolerance=std_tolerance)
 
     # Fit index calculation, handles potential NaNs from nrmse
     fit_val = 100.0 * (1.0 - nrmse_val)
@@ -91,28 +91,28 @@ def fit_index(
 
 
 def mae(
-    y_true: np.ndarray,  # Ground truth target values.
-    y_pred: np.ndarray,  # Estimated target values.
+    inp: np.ndarray,  # Predicted / estimated values.
+    targ: np.ndarray,  # Ground truth target values.
     time_axis: int = 0,  # Axis representing time or samples.
 ) -> np.ndarray:  # Mean Absolute Error for each channel.
     """
     Computes the Mean Absolute Error (MAE) along a specified time axis.
 
-    Calculates MAE = mean(abs(y_pred - y_true)) separately for each channel
+    Calculates MAE = mean(abs(inp - targ)) separately for each channel
     defined by the remaining axes.
     """
-    y_true = np.asarray(y_true)
-    y_pred = np.asarray(y_pred)
-    if y_true.shape != y_pred.shape:
-        raise ValueError(f"Input shapes must match. Got {y_true.shape} and {y_pred.shape}")
+    inp = np.asarray(inp)
+    targ = np.asarray(targ)
+    if inp.shape != targ.shape:
+        raise ValueError(f"Input shapes must match. Got {inp.shape} and {targ.shape}")
 
     # Ensure time_axis is valid
-    if not (0 <= time_axis < y_true.ndim):
-        raise ValueError(f"Invalid time_axis {time_axis} for array with {y_true.ndim} dimensions")
+    if not (0 <= time_axis < inp.ndim):
+        raise ValueError(f"Invalid time_axis {time_axis} for array with {inp.ndim} dimensions")
 
     # Calculate MAE
     try:
-        mae_val = np.mean(np.abs(y_pred - y_true), axis=time_axis)
+        mae_val = np.mean(np.abs(inp - targ), axis=time_axis)
     except FloatingPointError as e:
         warnings.warn(f"Floating point error during MAE calculation: {e}. Check for NaNs or Infs.", RuntimeWarning)
         raise e
@@ -120,19 +120,19 @@ def mae(
 
 
 def r_squared(
-    y_true: np.ndarray,  # Ground truth target values.
-    y_pred: np.ndarray,  # Estimated target values.
+    inp: np.ndarray,  # Predicted / estimated values.
+    targ: np.ndarray,  # Ground truth target values.
     time_axis: int = 0,  # Axis representing time or samples.
-    std_tolerance: float = 1e-9,  # Minimum standard deviation allowed for y_true.
+    std_tolerance: float = 1e-9,  # Minimum standard deviation allowed for targ.
 ) -> np.ndarray:  # R-squared (coefficient of determination) for each channel.
     """
     Computes the R-squared (coefficient of determination) score.
 
     Calculates R^2 = 1 - NRMSE^2 separately for each channel.
-    Returns NaN for channels where NRMSE could not be calculated (e.g., std(y_true) near zero).
-    A constant model that always predicts the mean of y_true would get R^2=0.
+    Returns NaN for channels where NRMSE could not be calculated (e.g., std(targ) near zero).
+    A constant model that always predicts the mean of targ would get R^2=0.
     """
-    nrmse_val = nrmse(y_true, y_pred, time_axis=time_axis, std_tolerance=std_tolerance)
+    nrmse_val = nrmse(inp, targ, time_axis=time_axis, std_tolerance=std_tolerance)
 
     r2 = 1.0 - nrmse_val**2
 
@@ -179,8 +179,8 @@ def _relative_angle(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
 
 
 def inclination_rmse_deg(
-    y_true: np.ndarray,  # Ground truth quaternions, shape (N, 4), [w, x, y, z].
-    y_pred: np.ndarray,  # Predicted quaternions, shape (N, 4), [w, x, y, z].
+    inp: np.ndarray,  # Predicted quaternions, shape (N, 4), [w, x, y, z].
+    targ: np.ndarray,  # Ground truth quaternions, shape (N, 4), [w, x, y, z].
 ) -> float:  # RMS inclination error in degrees.
     """
     Computes the RMS inclination (tilt) error in degrees between two quaternion time series.
@@ -188,19 +188,19 @@ def inclination_rmse_deg(
     Measures only the tilt component of orientation error, ignoring heading.
     Uses atan2 for numerical stability.
     """
-    y_true = np.asarray(y_true, dtype=np.float64)
-    y_pred = np.asarray(y_pred, dtype=np.float64)
-    if y_true.shape != y_pred.shape:
-        raise ValueError(f"Input shapes must match. Got {y_true.shape} and {y_pred.shape}")
-    if y_true.shape[-1] != 4:
-        raise ValueError(f"Expected quaternion arrays with last dimension 4, got {y_true.shape[-1]}")
-    angles_rad = _inclination_angle(y_true, y_pred)
+    inp = np.asarray(inp, dtype=np.float64)
+    targ = np.asarray(targ, dtype=np.float64)
+    if inp.shape != targ.shape:
+        raise ValueError(f"Input shapes must match. Got {inp.shape} and {targ.shape}")
+    if inp.shape[-1] != 4:
+        raise ValueError(f"Expected quaternion arrays with last dimension 4, got {inp.shape[-1]}")
+    angles_rad = _inclination_angle(inp, targ)
     return float(np.sqrt(np.mean(angles_rad**2)) * 180.0 / np.pi)
 
 
 def orientation_rmse_deg(
-    y_true: np.ndarray,  # Ground truth quaternions, shape (N, 4), [w, x, y, z].
-    y_pred: np.ndarray,  # Predicted quaternions, shape (N, 4), [w, x, y, z].
+    inp: np.ndarray,  # Predicted quaternions, shape (N, 4), [w, x, y, z].
+    targ: np.ndarray,  # Ground truth quaternions, shape (N, 4), [w, x, y, z].
 ) -> float:  # RMS full rotation error in degrees.
     """
     Computes the RMS full 3D rotation error in degrees between two quaternion time series.
@@ -208,11 +208,11 @@ def orientation_rmse_deg(
     Measures the complete rotation angle between predicted and true orientations.
     Uses atan2 for numerical stability.
     """
-    y_true = np.asarray(y_true, dtype=np.float64)
-    y_pred = np.asarray(y_pred, dtype=np.float64)
-    if y_true.shape != y_pred.shape:
-        raise ValueError(f"Input shapes must match. Got {y_true.shape} and {y_pred.shape}")
-    if y_true.shape[-1] != 4:
-        raise ValueError(f"Expected quaternion arrays with last dimension 4, got {y_true.shape[-1]}")
-    angles_rad = _relative_angle(y_true, y_pred)
+    inp = np.asarray(inp, dtype=np.float64)
+    targ = np.asarray(targ, dtype=np.float64)
+    if inp.shape != targ.shape:
+        raise ValueError(f"Input shapes must match. Got {inp.shape} and {targ.shape}")
+    if inp.shape[-1] != 4:
+        raise ValueError(f"Expected quaternion arrays with last dimension 4, got {inp.shape[-1]}")
+    angles_rad = _relative_angle(inp, targ)
     return float(np.sqrt(np.mean(angles_rad**2)) * 180.0 / np.pi)

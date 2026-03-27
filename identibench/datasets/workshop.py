@@ -44,8 +44,8 @@ def dl_wiener_hammerstein(
     dataset_to_hdf5(train, valid, test, save_path, train_valid=(train_val if save_train_valid else None))
 
 
-def rmse_mV(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    return identibench.metrics.rmse(y_true, y_pred) * 1000
+def rmse_mV(inp: np.ndarray, targ: np.ndarray) -> float:
+    return identibench.metrics.rmse(inp, targ) * 1000
 
 
 BenchmarkWH_Simulation = idb.BenchmarkSpecSimulation(
