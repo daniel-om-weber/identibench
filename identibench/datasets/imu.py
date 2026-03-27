@@ -2,11 +2,12 @@
 
 __all__ = [
     "dl_imu",
-    "BenchmarkIMU_Sensor1",
-    "BenchmarkIMU_Sensor2",
+    "BenchmarkIMU_Inclination",
     "BenchmarkIMU_Relative",
     "imu_split_all_test",
     "imu_split_train_test",
+    "imu_split_all_test_persensor",
+    "imu_split_train_test_persensor",
 ]
 
 from io import BytesIO
@@ -40,6 +41,7 @@ ALL_FILES = [
 ]
 
 ALL_HDF5_FILES = [f"{name}.hdf5" for name in ALL_FILES]
+ALL_HDF5_FILES_PERSENSOR = [f"{name}_{s}.hdf5" for name in ALL_FILES for s in ("s1", "s2")]
 
 _xyz = ["x", "y", "z"]
 _wxyz = ["w", "x", "y", "z"]
@@ -48,9 +50,12 @@ imu_u_s1_cols = [f"acc1_{a}" for a in _xyz] + [f"gyr1_{a}" for a in _xyz]
 imu_u_s2_cols = [f"acc2_{a}" for a in _xyz] + [f"gyr2_{a}" for a in _xyz]
 imu_u_cols = imu_u_s1_cols + imu_u_s2_cols
 
+imu_u_generic = [f"acc_{a}" for a in _xyz] + [f"gyr_{a}" for a in _xyz]
+
 imu_y_q1_cols = [f"q1_{a}" for a in _wxyz]
 imu_y_q2_cols = [f"q2_{a}" for a in _wxyz]
 imu_y_rel_cols = [f"qrel_{a}" for a in _wxyz]
+imu_y_q_generic = [f"q_{a}" for a in _wxyz]
 
 # --- Split definitions ---
 
@@ -77,6 +82,30 @@ imu_split_train_test = {
     "test": [f"{n}.hdf5" for n in ["data_1D_05", "data_2D_07", "data_3D_05"]],
 }
 
+_TRAIN_NAMES = [
+    "data_1D_01",
+    "data_1D_02",
+    "data_1D_03",
+    "data_2D_01",
+    "data_2D_02",
+    "data_2D_03",
+    "data_3D_01",
+    "data_3D_02",
+    "data_3D_03",
+]
+_VALID_NAMES = ["data_1D_04", "data_2D_05", "data_3D_04"]
+_TEST_NAMES = ["data_1D_05", "data_2D_07", "data_3D_05"]
+
+imu_split_all_test_persensor = {
+    "test": ALL_HDF5_FILES_PERSENSOR,
+}
+
+imu_split_train_test_persensor = {
+    "train": [f"{n}_{s}.hdf5" for n in _TRAIN_NAMES for s in ("s1", "s2")],
+    "valid": [f"{n}_{s}.hdf5" for n in _VALID_NAMES for s in ("s1", "s2")],
+    "test": [f"{n}_{s}.hdf5" for n in _TEST_NAMES for s in ("s1", "s2")],
+}
+
 
 def _quat_relative(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
     """Compute q1 * inv(q2) for unit quaternions. Shape: (N, 4), [w,x,y,z]."""
@@ -91,6 +120,11 @@ def _quat_relative(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
 
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/daniel-om-weber/dfjimu/main/data"
 
+_SENSOR_MAPPINGS = [
+    ("s1", list(zip(imu_u_generic, imu_u_s1_cols)) + list(zip(imu_y_q_generic, imu_y_q1_cols))),
+    ("s2", list(zip(imu_u_generic, imu_u_s2_cols)) + list(zip(imu_y_q_generic, imu_y_q2_cols))),
+]
+
 
 def dl_imu(
     save_path: Path,
@@ -98,8 +132,9 @@ def dl_imu(
 ) -> None:
     """Download IMU .mat files from GitHub and convert to HDF5 (flat directory)."""
     save_path = Path(save_path)
+    all_files = ALL_HDF5_FILES + ALL_HDF5_FILES_PERSENSOR
     if save_path.is_dir() and not force_download:
-        if all((save_path / f).exists() for f in ALL_HDF5_FILES):
+        if all((save_path / f).exists() for f in all_files):
             return
 
     save_path.mkdir(parents=True, exist_ok=True)
@@ -139,31 +174,33 @@ def dl_imu(
             f.attrs["r_12"] = r_12
             f.attrs["r_21"] = r_21
 
+        n = sensor_data.shape[0]
+        source_fname = f"{name}.hdf5"
+        for suffix, col_mapping in _SENSOR_MAPPINGS:
+            virt_path = save_path / f"{name}_{suffix}.hdf5"
+            with h5py.File(virt_path, "w") as vf:
+                for generic_name, source_name in col_mapping:
+                    vsource = h5py.VirtualSource(source_fname, source_name, shape=(n,), dtype="f4")
+                    layout = h5py.VirtualLayout(shape=(n,), dtype="f4")
+                    layout[:] = vsource
+                    vf.create_virtual_dataset(generic_name, layout)
+                vf.attrs["fs"] = fs
+                vf.attrs["r_12"] = r_12
+                vf.attrs["r_21"] = r_21
+
 
 # --- Benchmark specifications ---
 
-BenchmarkIMU_Sensor1 = idb.BenchmarkSpecSimulation(
-    name="BenchmarkIMU_Sensor1",
+BenchmarkIMU_Inclination = idb.BenchmarkSpecSimulation(
+    name="BenchmarkIMU_Inclination",
     dataset_id="imu",
-    u_cols=imu_u_s1_cols,
-    y_cols=imu_y_q1_cols,
+    u_cols=imu_u_generic,
+    y_cols=imu_y_q_generic,
     metric_func=inclination_rmse_deg,
     download_func=dl_imu,
     sampling_time=1.0 / 50.0,
     init_window=0,
-    split=imu_split_all_test,
-)
-
-BenchmarkIMU_Sensor2 = idb.BenchmarkSpecSimulation(
-    name="BenchmarkIMU_Sensor2",
-    dataset_id="imu",
-    u_cols=imu_u_s2_cols,
-    y_cols=imu_y_q2_cols,
-    metric_func=inclination_rmse_deg,
-    download_func=dl_imu,
-    sampling_time=1.0 / 50.0,
-    init_window=0,
-    split=imu_split_all_test,
+    split=imu_split_all_test_persensor,
 )
 
 BenchmarkIMU_Relative = idb.BenchmarkSpecSimulation(

@@ -47,7 +47,7 @@ from .datasets.quad_pi import BenchmarkQuadPi_Simulation, BenchmarkQuadPi_Predic
 # from .datasets.broad import BenchmarkBroad_Simulation, BenchmarkBroad_Prediction
 
 # IMU Benchmarks
-from .datasets.imu import BenchmarkIMU_Sensor1, BenchmarkIMU_Sensor2, BenchmarkIMU_Relative
+from .datasets.imu import BenchmarkIMU_Inclination, BenchmarkIMU_Relative
 
 simulation_benchmarks = {
     "WH_Sim": BenchmarkWH_Simulation,
@@ -61,8 +61,7 @@ simulation_benchmarks = {
     "Ship_Sim": BenchmarkShip_Simulation,
     "QuadPelican_Sim": BenchmarkQuadPelican_Simulation,
     "QuadPi_Sim": BenchmarkQuadPi_Simulation,
-    "IMU_Sensor1_Sim": BenchmarkIMU_Sensor1,
-    "IMU_Sensor2_Sim": BenchmarkIMU_Sensor2,
+    "IMU_Inclination_Sim": BenchmarkIMU_Inclination,
     "IMU_Relative_Sim": BenchmarkIMU_Relative,
 }
 
