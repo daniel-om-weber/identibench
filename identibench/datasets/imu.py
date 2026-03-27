@@ -19,7 +19,7 @@ import scipy.io
 
 import identibench.benchmark as idb
 from identibench.metrics import inclination_rmse_deg, orientation_rmse_deg
-from identibench.utils import write_array
+from identibench.utils import write_dataset
 
 ALL_FILES = [
     "data_1D_01",
@@ -41,13 +41,16 @@ ALL_FILES = [
 
 ALL_HDF5_FILES = [f"{name}.hdf5" for name in ALL_FILES]
 
-# Inputs: 12 IMU channels (acc1 x3, gyr1 x3, acc2 x3, gyr2 x3)
-imu_u_cols = [f"u{i}" for i in range(12)]
+_xyz = ["x", "y", "z"]
+_wxyz = ["w", "x", "y", "z"]
 
-# Outputs: quaternion [w, x, y, z] for sensor 1, sensor 2, and relative
-imu_y_q1_cols = [f"y_q1_{i}" for i in range(4)]
-imu_y_q2_cols = [f"y_q2_{i}" for i in range(4)]
-imu_y_rel_cols = [f"y_rel_{i}" for i in range(4)]
+imu_u_s1_cols = [f"acc1_{a}" for a in _xyz] + [f"gyr1_{a}" for a in _xyz]
+imu_u_s2_cols = [f"acc2_{a}" for a in _xyz] + [f"gyr2_{a}" for a in _xyz]
+imu_u_cols = imu_u_s1_cols + imu_u_s2_cols
+
+imu_y_q1_cols = [f"q1_{a}" for a in _wxyz]
+imu_y_q2_cols = [f"q2_{a}" for a in _wxyz]
+imu_y_rel_cols = [f"qrel_{a}" for a in _wxyz]
 
 # --- Split definitions ---
 
@@ -124,10 +127,14 @@ def dl_imu(
         fs = float(data.rate)
 
         with h5py.File(hdf5_path, "w") as f:
-            write_array(f, "u", sensor_data)
-            write_array(f, "y_q1_", q1_ref)
-            write_array(f, "y_q2_", q2_ref)
-            write_array(f, "y_rel_", q_rel)
+            for i, col in enumerate(imu_u_cols):
+                write_dataset(f, col, sensor_data[:, i])
+            for i, col in enumerate(imu_y_q1_cols):
+                write_dataset(f, col, q1_ref[:, i])
+            for i, col in enumerate(imu_y_q2_cols):
+                write_dataset(f, col, q2_ref[:, i])
+            for i, col in enumerate(imu_y_rel_cols):
+                write_dataset(f, col, q_rel[:, i])
             f.attrs["fs"] = fs
             f.attrs["r_12"] = r_12
             f.attrs["r_21"] = r_21
@@ -138,7 +145,7 @@ def dl_imu(
 BenchmarkIMU_Sensor1 = idb.BenchmarkSpecSimulation(
     name="BenchmarkIMU_Sensor1",
     dataset_id="imu",
-    u_cols=imu_u_cols,
+    u_cols=imu_u_s1_cols,
     y_cols=imu_y_q1_cols,
     metric_func=inclination_rmse_deg,
     download_func=dl_imu,
@@ -150,7 +157,7 @@ BenchmarkIMU_Sensor1 = idb.BenchmarkSpecSimulation(
 BenchmarkIMU_Sensor2 = idb.BenchmarkSpecSimulation(
     name="BenchmarkIMU_Sensor2",
     dataset_id="imu",
-    u_cols=imu_u_cols,
+    u_cols=imu_u_s2_cols,
     y_cols=imu_y_q2_cols,
     metric_func=inclination_rmse_deg,
     download_func=dl_imu,

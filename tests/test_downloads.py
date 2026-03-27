@@ -239,7 +239,9 @@ class TestDlImu:
     """Tests for IMU download and HDF5 conversion with mocked HTTP + scipy."""
 
     def test_dl_imu_creates_flat_hdf5(self, tmp_path):
-        from identibench.datasets.imu import dl_imu, ALL_HDF5_FILES
+        from identibench.datasets.imu import (
+            dl_imu, ALL_HDF5_FILES, imu_u_cols, imu_y_q1_cols, imu_y_q2_cols, imu_y_rel_cols,
+        )
 
         mock_data = MagicMock()
         mock_data.sensorData = np.random.default_rng(0).standard_normal((100, 12))
@@ -262,12 +264,10 @@ class TestDlImu:
             assert fpath.exists(), f"{fname} not created"
 
             with h5py.File(fpath, "r") as f:
-                for i in range(12):
-                    assert f"u{i}" in f, f"u{i} missing in {fname}"
-                for i in range(4):
-                    assert f"y_q1_{i}" in f, f"y_q1_{i} missing in {fname}"
-                    assert f"y_q2_{i}" in f, f"y_q2_{i} missing in {fname}"
-                    assert f"y_rel_{i}" in f, f"y_rel_{i} missing in {fname}"
+                for col in imu_u_cols:
+                    assert col in f, f"{col} missing in {fname}"
+                for col in imu_y_q1_cols + imu_y_q2_cols + imu_y_rel_cols:
+                    assert col in f, f"{col} missing in {fname}"
                 assert f.attrs["fs"] == 50.0
                 assert "r_12" in f.attrs
                 assert "r_21" in f.attrs
@@ -336,7 +336,7 @@ class TestSlowIntegration:
         )
 
         def build_model(context):
-            def model(u, y_init):
+            def model(u, y, attrs):
                 return np.zeros((u.shape[0], len(context.spec.y_cols)))
             return model
 
