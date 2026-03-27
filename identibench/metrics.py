@@ -1,6 +1,6 @@
 """Metric functions for evaluating system identification models."""
 
-__all__ = ["rmse", "nrmse", "fit_index", "mae", "r_squared"]
+__all__ = ["rmse", "nrmse", "fit_index", "mae", "r_squared", "inclination_rmse_deg", "orientation_rmse_deg"]
 
 import numpy as np
 import warnings
@@ -137,3 +137,82 @@ def r_squared(
     r2 = 1.0 - nrmse_val**2
 
     return r2
+
+
+# --- Quaternion orientation metrics ---
+
+
+def _quat_normalize(q: np.ndarray) -> np.ndarray:
+    """Normalize quaternions to unit norm. Input shape: (..., 4)."""
+    return q / np.linalg.norm(q, axis=-1, keepdims=True)
+
+
+def _quat_diff(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
+    """Compute difference quaternion q1 * inv(q2). Inputs shape: (..., 4), [w,x,y,z] convention."""
+    q1 = _quat_normalize(q1)
+    q2 = _quat_normalize(q2)
+    w1, x1, y1, z1 = q1[..., 0], q1[..., 1], q1[..., 2], q1[..., 3]
+    w2, x2, y2, z2 = q2[..., 0], q2[..., 1], q2[..., 2], q2[..., 3]
+    ow = w1 * w2 + x1 * x2 + y1 * y2 + z1 * z2
+    ox = -w1 * x2 + x1 * w2 - y1 * z2 + z1 * y2
+    oy = -w1 * y2 + x1 * z2 + y1 * w2 - z1 * x2
+    oz = -w1 * z2 - x1 * y2 + y1 * x2 + z1 * w2
+    return np.stack([ow, ox, oy, oz], axis=-1)
+
+
+def _inclination_angle(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
+    """Inclination (tilt) angle in radians between two quaternion arrays."""
+    q = _quat_diff(q1, q2)
+    return 2 * np.arctan2(
+        np.sqrt(q[..., 1] ** 2 + q[..., 2] ** 2),
+        np.sqrt(q[..., 0] ** 2 + q[..., 3] ** 2),
+    )
+
+
+def _relative_angle(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
+    """Full 3D rotation angle in radians between two quaternion arrays."""
+    q = _quat_diff(q1, q2)
+    return 2 * np.arctan2(
+        np.linalg.norm(q[..., 1:], axis=-1),
+        np.abs(q[..., 0]),
+    )
+
+
+def inclination_rmse_deg(
+    y_true: np.ndarray,  # Ground truth quaternions, shape (N, 4), [w, x, y, z].
+    y_pred: np.ndarray,  # Predicted quaternions, shape (N, 4), [w, x, y, z].
+) -> float:  # RMS inclination error in degrees.
+    """
+    Computes the RMS inclination (tilt) error in degrees between two quaternion time series.
+
+    Measures only the tilt component of orientation error, ignoring heading.
+    Uses atan2 for numerical stability.
+    """
+    y_true = np.asarray(y_true, dtype=np.float64)
+    y_pred = np.asarray(y_pred, dtype=np.float64)
+    if y_true.shape != y_pred.shape:
+        raise ValueError(f"Input shapes must match. Got {y_true.shape} and {y_pred.shape}")
+    if y_true.shape[-1] != 4:
+        raise ValueError(f"Expected quaternion arrays with last dimension 4, got {y_true.shape[-1]}")
+    angles_rad = _inclination_angle(y_true, y_pred)
+    return float(np.sqrt(np.mean(angles_rad**2)) * 180.0 / np.pi)
+
+
+def orientation_rmse_deg(
+    y_true: np.ndarray,  # Ground truth quaternions, shape (N, 4), [w, x, y, z].
+    y_pred: np.ndarray,  # Predicted quaternions, shape (N, 4), [w, x, y, z].
+) -> float:  # RMS full rotation error in degrees.
+    """
+    Computes the RMS full 3D rotation error in degrees between two quaternion time series.
+
+    Measures the complete rotation angle between predicted and true orientations.
+    Uses atan2 for numerical stability.
+    """
+    y_true = np.asarray(y_true, dtype=np.float64)
+    y_pred = np.asarray(y_pred, dtype=np.float64)
+    if y_true.shape != y_pred.shape:
+        raise ValueError(f"Input shapes must match. Got {y_true.shape} and {y_pred.shape}")
+    if y_true.shape[-1] != 4:
+        raise ValueError(f"Expected quaternion arrays with last dimension 4, got {y_true.shape[-1]}")
+    angles_rad = _relative_angle(y_true, y_pred)
+    return float(np.sqrt(np.mean(angles_rad**2)) * 180.0 / np.pi)

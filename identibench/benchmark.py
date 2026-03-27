@@ -18,7 +18,7 @@ import multiprocessing
 import numpy as np
 import pandas as pd
 import time
-from .utils import get_default_data_root, _load_sequences_from_files, hdf_files_from_path
+from .utils import get_default_data_root, _load_sequences_from_files, hdf_files_from_path, Sequence
 
 
 def aggregate_metric_score(
@@ -54,7 +54,6 @@ class BenchmarkSpecBase:
         u_cols: list[str],  # list of column names for input signals (u).
         y_cols: list[str],  # list of column names for output signals (y).
         metric_func: Callable[[np.ndarray, np.ndarray], float],  # Primary metric: `func(y_true, y_pred)`.
-        x_cols: list[str] | None = None,  # Optional state inputs (x).
         sampling_time: float | None = None,  # Optional sampling time (seconds).
         download_func: Callable[[Path, bool], None] | None = None,  # Dataset preparation func.
         test_model_func: Callable[[BenchmarkSpecBase, Callable], dict[str, Any]] = None,
@@ -64,19 +63,20 @@ class BenchmarkSpecBase:
             Path,
             Callable[[], Path],
         ] = get_default_data_root,  # root dir for dataset, may be a callable or path
+        split: dict[str, list[str]] | None = None,  # Optional split mapping filenames to train/valid/test.
     ):
         self.name = name
         self.dataset_id = dataset_id
         self.u_cols = u_cols
         self.y_cols = y_cols
         self.metric_func = metric_func
-        self.x_cols = x_cols
         self.sampling_time = sampling_time
         self.download_func = download_func
         self.test_model_func = test_model_func
         self.custom_test_evaluation = custom_test_evaluation
         self.init_window = init_window
         self._data_root = data_root
+        self.split = split
 
     @property
     def data_root(self) -> Path:
@@ -112,17 +112,26 @@ class BenchmarkSpecBase:
 
     @property
     def train_files(self) -> list[Path]:
-        """Returns the list of hdf5 files in the training directory."""
+        """Returns the list of hdf5 files for training."""
+        if self.split is not None:
+            return sorted(self.dataset_path / f for f in self.split.get("train", []))
         return hdf_files_from_path(self.train_path)
 
     @property
     def valid_files(self) -> list[Path]:
-        """Returns the list of hdf5 files in the validation directory."""
+        """Returns the list of hdf5 files for validation."""
+        if self.split is not None:
+            return sorted(self.dataset_path / f for f in self.split.get("valid", []))
         return hdf_files_from_path(self.valid_path)
 
     @property
     def train_valid_files(self) -> list[Path]:
-        """Returns the list of hdf5 files in the train_valid directory if it exists, otherwise returns the union of the train and valid directories."""
+        """Returns the list of hdf5 files for combined training and validation."""
+        if self.split is not None:
+            train = self.split.get("train", [])
+            valid = self.split.get("valid", [])
+            train_valid = self.split.get("train_valid", train + valid)
+            return sorted(self.dataset_path / f for f in train_valid)
         train_valid_files = hdf_files_from_path(self.train_valid_path)
         if train_valid_files:
             return train_valid_files
@@ -133,7 +142,9 @@ class BenchmarkSpecBase:
 
     @property
     def test_files(self) -> list[Path]:
-        """Returns the list of hdf5 files in the test directory."""
+        """Returns the list of hdf5 files for testing."""
+        if self.split is not None:
+            return sorted(self.dataset_path / f for f in self.split.get("test", []))
         return hdf_files_from_path(self.test_path)
 
     def ensure_dataset_exists(self, force_download: bool = False) -> None:
@@ -166,9 +177,9 @@ class BenchmarkSpecBase:
 
 def _test_simulation(specs, model):
     results = []
-    for u_test, y_test, _ in _load_sequences_from_files(specs.test_files, specs.u_cols, specs.y_cols, specs.x_cols):
-        y_pred = model(u_test, y_test[: specs.init_window])
-        y_test_win = y_test[specs.init_window :]
+    for seq in _load_sequences_from_files(specs.test_files, specs.u_cols, specs.y_cols):
+        y_pred = model(seq.u, seq.y[: specs.init_window])
+        y_test_win = seq.y[specs.init_window :]
         y_pred = y_pred[-y_test_win.shape[0] :]
         results.append((y_pred, y_test_win))
     return results
@@ -189,7 +200,6 @@ class BenchmarkSpecSimulation(BenchmarkSpecBase):
         u_cols: list[str],  # list of column names for input signals (u).
         y_cols: list[str],  # list of column names for output signals (y).
         metric_func: Callable[[np.ndarray, np.ndarray], float],  # Primary metric: `func(y_true, y_pred)`.
-        x_cols: list[str] | None = None,  # Optional state inputs (x).
         sampling_time: float | None = None,  # Optional sampling time (seconds).
         download_func: Callable[[Path, bool], None] | None = None,  # Dataset preparation func.
         test_model_func: Callable[[BenchmarkSpecBase, Callable], dict[str, Any]] = _test_simulation,
@@ -199,29 +209,30 @@ class BenchmarkSpecSimulation(BenchmarkSpecBase):
             Path,
             Callable[[], Path],
         ] = get_default_data_root,  # root dir for dataset, may be a callable or path
+        split: dict[str, list[str]] | None = None,  # Optional split mapping filenames to train/valid/test.
     ):
         self.name = name
         self.dataset_id = dataset_id
         self.u_cols = u_cols
         self.y_cols = y_cols
         self.metric_func = metric_func
-        self.x_cols = x_cols
         self.sampling_time = sampling_time
         self.download_func = download_func
         self.test_model_func = test_model_func
         self.custom_test_evaluation = custom_test_evaluation
         self.init_window = init_window
         self._data_root = data_root
+        self.split = split
 
 
 def _test_prediction(specs, model):
     results = []
-    for u_test, y_test, _ in _load_sequences_from_files(specs.test_files, specs.u_cols, specs.y_cols, specs.x_cols):
+    for seq in _load_sequences_from_files(specs.test_files, specs.u_cols, specs.y_cols):
         # iterate through windows of u_test and y_test
         window_results = []
-        for i in range(0, u_test.shape[0] - specs.init_window - specs.pred_horizon, specs.pred_step):
-            u_test_win = u_test[i : i + specs.init_window + specs.pred_horizon]
-            y_test_win = y_test[i : i + specs.init_window + specs.pred_horizon]
+        for i in range(0, seq.u.shape[0] - specs.init_window - specs.pred_horizon, specs.pred_step):
+            u_test_win = seq.u[i : i + specs.init_window + specs.pred_horizon]
+            y_test_win = seq.y[i : i + specs.init_window + specs.pred_horizon]
             y_pred = model(u_test_win, y_test_win[: specs.init_window])
             window_results.append((y_pred, y_test_win))
         results.append(window_results)
@@ -245,7 +256,6 @@ class BenchmarkSpecPrediction(BenchmarkSpecBase):
         metric_func: Callable[[np.ndarray, np.ndarray], float],  # Primary metric: `func(y_true, y_pred)`.
         pred_horizon: int,  # The 'k' in k-step ahead prediction (mandatory for this type).
         pred_step: int,  # Step size for k-step ahead prediction (e.g., predict y[t+k] using data up to t).
-        x_cols: list[str] | None = None,  # Optional state inputs (x).
         sampling_time: float | None = None,  # Optional sampling time (seconds).
         download_func: Callable[[Path, bool], None] | None = None,  # Dataset preparation func.
         test_model_func: Callable[[BenchmarkSpecBase, Callable], dict[str, Any]] = _test_prediction,
@@ -255,6 +265,7 @@ class BenchmarkSpecPrediction(BenchmarkSpecBase):
             Path,
             Callable[[], Path],
         ] = get_default_data_root,  # root dir for dataset, may be a callable or path
+        split: dict[str, list[str]] | None = None,  # Optional split mapping filenames to train/valid/test.
     ):
         if pred_horizon <= 0:
             raise ValueError("pred_horizon must be a positive integer for PredictionBenchmarkSpec.")
@@ -266,13 +277,13 @@ class BenchmarkSpecPrediction(BenchmarkSpecBase):
         self.u_cols = u_cols
         self.y_cols = y_cols
         self.metric_func = metric_func
-        self.x_cols = x_cols
         self.sampling_time = sampling_time
         self.download_func = download_func
         self.test_model_func = test_model_func
         self.custom_test_evaluation = custom_test_evaluation
         self.init_window = init_window
         self._data_root = data_root
+        self.split = split
 
 
 class TrainingContext:
@@ -296,36 +307,36 @@ class TrainingContext:
 
     # --- Data Access Methods ---
 
-    def get_train_sequences(self) -> Iterator[tuple[np.ndarray, np.ndarray, np.ndarray | None]]:
-        """Returns a lazy iterator yielding raw (u, y, x) tuples for the 'train' subset."""
+    def get_train_sequences(self) -> Iterator[Sequence]:
+        """Returns a lazy iterator yielding Sequence objects for the 'train' subset."""
         return _load_sequences_from_files(
             file_paths=self.spec.train_files,
             u_cols=self.spec.u_cols,
             y_cols=self.spec.y_cols,
-            x_cols=self.spec.x_cols,
         )
 
-    def get_valid_sequences(self) -> Iterator[tuple[np.ndarray, np.ndarray, np.ndarray | None]]:
-        """Returns a lazy iterator yielding raw (u, y, x) tuples for the 'valid' subset."""
+    def get_valid_sequences(self) -> Iterator[Sequence]:
+        """Returns a lazy iterator yielding Sequence objects for the 'valid' subset."""
         return _load_sequences_from_files(
             file_paths=self.spec.valid_files,
             u_cols=self.spec.u_cols,
             y_cols=self.spec.y_cols,
-            x_cols=self.spec.x_cols,
         )
 
-    def get_train_valid_sequences(self) -> Iterator[tuple[np.ndarray, np.ndarray, np.ndarray | None]]:
-        """
-        Returns a lazy iterator yielding raw (u, y, x) tuples for combined training and validation.
-
-        Checks for a 'train_valid' subset directory first. If it exists, loads data from there.
-        If not, it loads data from 'train' and 'valid' subsets sequentially.
-        """
+    def get_train_valid_sequences(self) -> Iterator[Sequence]:
+        """Returns a lazy iterator yielding Sequence objects for combined training and validation."""
         return _load_sequences_from_files(
             file_paths=self.spec.train_valid_files,
             u_cols=self.spec.u_cols,
             y_cols=self.spec.y_cols,
-            x_cols=self.spec.x_cols,
+        )
+
+    def get_test_sequences(self) -> Iterator[Sequence]:
+        """Returns a lazy iterator yielding Sequence objects for the 'test' subset."""
+        return _load_sequences_from_files(
+            file_paths=self.spec.test_files,
+            u_cols=self.spec.u_cols,
+            y_cols=self.spec.y_cols,
         )
 
 

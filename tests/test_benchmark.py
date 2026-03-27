@@ -3,6 +3,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+import h5py
 
 from identibench.benchmark import (
     BenchmarkSpecSimulation,
@@ -155,9 +156,9 @@ class TestLoadSequences:
         sequences = list(
             _load_sequences_from_files(sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols)
         )
-        u, y, x = sequences[0]
-        assert u.shape == (50, 2)
-        assert y.shape == (50, 1)
+        seq = sequences[0]
+        assert seq.u.shape == (50, 2)
+        assert seq.y.shape == (50, 1)
 
     def test_load_sequences_yields_all_files(self, sim_spec):
         sequences = list(
@@ -171,18 +172,36 @@ class TestLoadSequences:
                 sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols, win_sz=20, stp_sz=10
             )
         )
-        for u, y, x in sequences:
-            assert u.shape == (20, 2)
-            assert y.shape == (20, 1)
+        for seq in sequences:
+            assert seq.u.shape == (20, 2)
+            assert seq.y.shape == (20, 1)
         # 2 files, each 50 samples: windows at offsets 0,10,20,30 = 4 windows per file
         assert len(sequences) == 2 * 4
 
-    def test_load_sequences_no_x_cols(self, sim_spec):
+    def test_load_sequences_attrs(self, sim_spec):
         sequences = list(
             _load_sequences_from_files(sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols)
         )
-        _, _, x = sequences[0]
-        assert x is None
+        assert "fs" in sequences[0].attrs
+        assert sequences[0].attrs["fs"] == 10.0
+
+    def test_load_sequences_windowed_attrs_shared(self, sim_spec):
+        sequences = list(
+            _load_sequences_from_files(
+                sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols, win_sz=20, stp_sz=10
+            )
+        )
+        # All windows from the same file should have the same attrs
+        for seq in sequences:
+            assert seq.attrs["fs"] == 10.0
+
+    def test_load_sequences_unpacking(self, sim_spec):
+        sequences = list(
+            _load_sequences_from_files(sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols)
+        )
+        u, y, attrs = sequences[0]
+        assert u.shape == (50, 2)
+        assert isinstance(attrs, dict)
 
     def test_load_sequences_empty_path(self):
         sequences = list(_load_sequences_from_files([], ["u0"], ["y0"]))
@@ -213,8 +232,8 @@ class TestTrainingContext:
         ctx = TrainingContext(spec=sim_spec, hyperparameters={})
         sequences = list(ctx.get_train_sequences())
         assert len(sequences) == 2
-        u, y, x = sequences[0]
-        assert u.shape == (50, 2)
+        assert sequences[0].u.shape == (50, 2)
+        assert "fs" in sequences[0].attrs
 
     def test_valid_sequences(self, sim_spec):
         ctx = TrainingContext(spec=sim_spec, hyperparameters={})
@@ -460,3 +479,73 @@ class TestAggregateMetricScore:
         test_results = [(y, y)]
         scores = aggregate_metric_score(test_results, rmse, score_name="my_metric")
         assert "my_metric" in scores
+
+
+# --- Split-based file resolution tests ---
+
+
+class TestSplitBasedFileResolution:
+    def test_split_resolves_flat_files(self, tmp_path):
+        ds_dir = tmp_path / "flat_ds"
+        ds_dir.mkdir()
+        for name in ["a.hdf5", "b.hdf5", "c.hdf5"]:
+            with h5py.File(ds_dir / name, "w") as f:
+                f.create_dataset("u0", data=np.zeros(10, dtype=np.float32))
+                f.create_dataset("y0", data=np.zeros(10, dtype=np.float32))
+
+        spec = BenchmarkSpecSimulation(
+            name="TestFlat", dataset_id="flat_ds", u_cols=["u0"], y_cols=["y0"],
+            metric_func=rmse, init_window=0, data_root=tmp_path,
+            split={"train": ["a.hdf5"], "valid": ["b.hdf5"], "test": ["c.hdf5"]},
+        )
+        assert len(spec.train_files) == 1
+        assert spec.train_files[0] == ds_dir / "a.hdf5"
+        assert len(spec.valid_files) == 1
+        assert spec.valid_files[0] == ds_dir / "b.hdf5"
+        assert len(spec.test_files) == 1
+        assert spec.test_files[0] == ds_dir / "c.hdf5"
+
+    def test_no_split_uses_subdirs(self, sim_spec):
+        assert len(sim_spec.train_files) == 2
+        assert sim_spec.train_files[0].parent.name == "train"
+
+    def test_split_train_valid_files_combines(self, tmp_path):
+        ds_dir = tmp_path / "tv_ds"
+        ds_dir.mkdir()
+        for name in ["a.hdf5", "b.hdf5"]:
+            with h5py.File(ds_dir / name, "w") as f:
+                f.create_dataset("u0", data=np.zeros(10, dtype=np.float32))
+
+        spec = BenchmarkSpecSimulation(
+            name="TestTV", dataset_id="tv_ds", u_cols=["u0"], y_cols=["y0"],
+            metric_func=rmse, data_root=tmp_path,
+            split={"train": ["a.hdf5"], "valid": ["b.hdf5"], "test": []},
+        )
+        assert len(spec.train_valid_files) == 2
+
+    def test_empty_split_returns_empty(self, tmp_path):
+        ds_dir = tmp_path / "empty_ds"
+        ds_dir.mkdir()
+        spec = BenchmarkSpecSimulation(
+            name="TestEmpty", dataset_id="empty_ds", u_cols=["u0"], y_cols=["y0"],
+            metric_func=rmse, data_root=tmp_path,
+            split={"train": [], "valid": [], "test": []},
+        )
+        assert spec.train_files == []
+        assert spec.valid_files == []
+        assert spec.test_files == []
+
+    def test_split_on_prediction_spec(self, tmp_path):
+        ds_dir = tmp_path / "pred_ds"
+        ds_dir.mkdir()
+        with h5py.File(ds_dir / "x.hdf5", "w") as f:
+            f.create_dataset("u0", data=np.zeros(10, dtype=np.float32))
+
+        spec = BenchmarkSpecPrediction(
+            name="TestPredSplit", dataset_id="pred_ds", u_cols=["u0"], y_cols=["y0"],
+            metric_func=rmse, pred_horizon=5, pred_step=5, data_root=tmp_path,
+            split={"test": ["x.hdf5"]},
+        )
+        assert len(spec.test_files) == 1
+
+

@@ -5,6 +5,7 @@ from .ship import dl_ship
 from .quad_pelican import dl_quad_pelican
 from .quad_pi import dl_quad_pi
 from .broad import dl_broad
+from .imu import dl_imu
 
 all_dataset_loaders = {
     "wiener_hammerstein": dl_wiener_hammerstein,
@@ -19,6 +20,7 @@ all_dataset_loaders = {
     "quad_pi": dl_quad_pi,
     "broad": dl_broad,
     "ced": dl_ced,
+    "imu": dl_imu,
 }
 
 

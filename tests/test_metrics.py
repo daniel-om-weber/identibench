@@ -2,7 +2,7 @@
 
 import numpy as np
 import pytest
-from identibench.metrics import rmse, nrmse, fit_index, mae, r_squared
+from identibench.metrics import rmse, nrmse, fit_index, mae, r_squared, inclination_rmse_deg, orientation_rmse_deg
 
 
 # --- Test data ---
@@ -142,3 +142,76 @@ class TestRSquared:
         with pytest.warns(RuntimeWarning, match="Standard deviation of y_true is below tolerance"):
             result = r_squared(data_const['y_true'], data_const['y_err'])
         assert np.isnan(result).all()
+
+
+# --- Inclination RMSE Tests ---
+
+class TestInclinationRmseDeg:
+    def test_identical_quaternions(self):
+        q = np.array([[1, 0, 0, 0]] * 10, dtype=np.float64)
+        assert inclination_rmse_deg(q, q) == pytest.approx(0.0, abs=1e-10)
+
+    def test_90_deg_tilt_about_x(self):
+        """90-degree rotation about x-axis: q = [cos(45°), sin(45°), 0, 0]."""
+        q_id = np.array([[1, 0, 0, 0]] * 10, dtype=np.float64)
+        c, s = np.cos(np.pi / 4), np.sin(np.pi / 4)
+        q_90 = np.array([[c, s, 0, 0]] * 10, dtype=np.float64)
+        assert inclination_rmse_deg(q_id, q_90) == pytest.approx(90.0, abs=0.1)
+
+    def test_pure_heading_rotation_gives_zero(self):
+        """Rotation purely about z-axis should give zero inclination error."""
+        q_id = np.array([[1, 0, 0, 0]] * 10, dtype=np.float64)
+        c, s = np.cos(np.pi / 4), np.sin(np.pi / 4)
+        q_z90 = np.array([[c, 0, 0, s]] * 10, dtype=np.float64)
+        assert inclination_rmse_deg(q_id, q_z90) == pytest.approx(0.0, abs=1e-6)
+
+    def test_antipodal_quaternions(self):
+        """q and -q represent the same rotation, error should be zero."""
+        q = np.array([[1, 0, 0, 0]] * 5, dtype=np.float64)
+        assert inclination_rmse_deg(q, -q) == pytest.approx(0.0, abs=1e-6)
+
+    def test_wrong_last_dim_raises(self):
+        with pytest.raises(ValueError, match="last dimension 4"):
+            inclination_rmse_deg(np.zeros((10, 3)), np.zeros((10, 3)))
+
+    def test_shape_mismatch_raises(self):
+        with pytest.raises(ValueError, match="Input shapes must match"):
+            inclination_rmse_deg(np.zeros((10, 4)), np.zeros((5, 4)))
+
+    def test_returns_float(self):
+        q = np.random.randn(50, 4)
+        q = q / np.linalg.norm(q, axis=1, keepdims=True)
+        assert isinstance(inclination_rmse_deg(q, q), float)
+
+
+# --- Orientation RMSE Tests ---
+
+class TestOrientationRmseDeg:
+    def test_identical_quaternions(self):
+        q = np.array([[1, 0, 0, 0]] * 10, dtype=np.float64)
+        assert orientation_rmse_deg(q, q) == pytest.approx(0.0, abs=1e-10)
+
+    def test_180_deg_about_z(self):
+        """180-degree rotation about z-axis: q = [0, 0, 0, 1]."""
+        q_id = np.array([[1, 0, 0, 0]] * 10, dtype=np.float64)
+        q_180z = np.array([[0, 0, 0, 1]] * 10, dtype=np.float64)
+        assert orientation_rmse_deg(q_id, q_180z) == pytest.approx(180.0, abs=0.1)
+
+    def test_90_deg_about_x(self):
+        q_id = np.array([[1, 0, 0, 0]] * 10, dtype=np.float64)
+        c, s = np.cos(np.pi / 4), np.sin(np.pi / 4)
+        q_90 = np.array([[c, s, 0, 0]] * 10, dtype=np.float64)
+        assert orientation_rmse_deg(q_id, q_90) == pytest.approx(90.0, abs=0.1)
+
+    def test_antipodal_quaternions(self):
+        q = np.array([[1, 0, 0, 0]] * 5, dtype=np.float64)
+        assert orientation_rmse_deg(q, -q) == pytest.approx(0.0, abs=1e-6)
+
+    def test_wrong_last_dim_raises(self):
+        with pytest.raises(ValueError, match="last dimension 4"):
+            orientation_rmse_deg(np.zeros((10, 3)), np.zeros((10, 3)))
+
+    def test_returns_float(self):
+        q = np.random.randn(50, 4)
+        q = q / np.linalg.norm(q, axis=1, keepdims=True)
+        assert isinstance(orientation_rmse_deg(q, q), float)

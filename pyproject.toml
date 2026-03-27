@@ -29,6 +29,7 @@ dependencies = [
     "gdown",
     "bagpy",
     "numpy",
+    "scipy",
 ]
 
 [project.optional-dependencies]

@@ -1,6 +1,7 @@
 """Utility functions for data loading, HDF5 I/O, and downloads."""
 
 __all__ = [
+    "Sequence",
     "get_default_data_root",
     "hdf_files_from_path",
     "write_dataset",
@@ -15,9 +16,18 @@ __all__ = [
 from nonlinear_benchmarks import *
 from collections.abc import Iterator
 from pathlib import Path
+from typing import NamedTuple, Any
 import numpy as np
 import h5py
 import os
+
+
+class Sequence(NamedTuple):
+    """A single time-series sequence with per-file HDF5 attributes."""
+
+    u: np.ndarray
+    y: np.ndarray
+    attrs: dict[str, Any]
 
 
 def get_default_data_root() -> Path:
@@ -70,10 +80,9 @@ def _load_sequences_from_files(
     file_paths: list[Path],
     u_cols: list[str],
     y_cols: list[str],
-    x_cols: list[str] | None = None,
     win_sz: int | None = None,
     stp_sz: int | None = None,
-) -> Iterator[tuple[np.ndarray, np.ndarray, np.ndarray | None]]:
+) -> Iterator[Sequence]:
     if not file_paths:
         return iter([])
     if win_sz is None and stp_sz is not None:
@@ -86,13 +95,13 @@ def _load_sequences_from_files(
             with h5py.File(file_path, "r") as f:
                 u_data = np.stack([f[col][()] for col in u_cols], axis=-1).astype(np.float32)
                 y_data = np.stack([f[col][()] for col in y_cols], axis=-1).astype(np.float32)
-                x_data = np.stack([f[col][()] for col in x_cols], axis=-1).astype(np.float32) if x_cols else None
+                attrs = dict(f.attrs)
         except Exception as e:
             print(f"Warning: Error reading {file_path}: {e}")
             continue
 
         if win_sz is None:
-            yield u_data, y_data, x_data
+            yield Sequence(u_data, y_data, attrs)
             continue
 
         seq_len = u_data.shape[0]
@@ -101,8 +110,7 @@ def _load_sequences_from_files(
 
         for start in range(0, seq_len - win_sz + 1, stp_sz):
             end = start + win_sz
-            x_win = x_data[start:end] if x_data is not None else None
-            yield u_data[start:end], y_data[start:end], x_win
+            yield Sequence(u_data[start:end], y_data[start:end], attrs)
 
 
 def write_dataset(

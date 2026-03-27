@@ -231,7 +231,63 @@ class TestDlWienerHammerstein:
 
 
 # ---------------------------------------------------------------------------
-# 4. Slow integration test
+# 4. dl_imu tests (mocked)
+# ---------------------------------------------------------------------------
+
+
+class TestDlImu:
+    """Tests for IMU download and HDF5 conversion with mocked HTTP + scipy."""
+
+    def test_dl_imu_creates_flat_hdf5(self, tmp_path):
+        from identibench.datasets.imu import dl_imu, ALL_HDF5_FILES
+
+        mock_data = MagicMock()
+        mock_data.sensorData = np.random.default_rng(0).standard_normal((100, 12))
+        mock_data.ref = np.random.default_rng(1).standard_normal((100, 17))
+        mock_data.r_12 = np.array([0.1, 0.2, 0.3])
+        mock_data.r_21 = np.array([0.4, 0.5, 0.6])
+        mock_data.rate = 50.0
+
+        mock_response = MagicMock()
+        mock_response.content = b"fake"
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("identibench.datasets.imu.requests.get", return_value=mock_response):
+            with patch("identibench.datasets.imu.scipy.io.loadmat", return_value={"data": mock_data}):
+                save_path = tmp_path / "imu"
+                dl_imu(save_path, force_download=True)
+
+        for fname in ALL_HDF5_FILES:
+            fpath = save_path / fname
+            assert fpath.exists(), f"{fname} not created"
+
+            with h5py.File(fpath, "r") as f:
+                for i in range(12):
+                    assert f"u{i}" in f, f"u{i} missing in {fname}"
+                for i in range(4):
+                    assert f"y_q1_{i}" in f, f"y_q1_{i} missing in {fname}"
+                    assert f"y_q2_{i}" in f, f"y_q2_{i} missing in {fname}"
+                    assert f"y_rel_{i}" in f, f"y_rel_{i} missing in {fname}"
+                assert f.attrs["fs"] == 50.0
+                assert "r_12" in f.attrs
+                assert "r_21" in f.attrs
+
+    def test_dl_imu_skips_existing(self, tmp_path):
+        """When all HDF5 files exist and force_download=False, no download occurs."""
+        from identibench.datasets.imu import dl_imu, ALL_HDF5_FILES
+
+        save_path = tmp_path / "imu"
+        save_path.mkdir()
+        for fname in ALL_HDF5_FILES:
+            (save_path / fname).touch()
+
+        with patch("identibench.datasets.imu.requests.get") as mock_get:
+            dl_imu(save_path, force_download=False)
+            mock_get.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# 5. Slow integration test
 # ---------------------------------------------------------------------------
 
 
