@@ -178,7 +178,8 @@ class BenchmarkSpecBase:
 def _test_simulation(specs, model):
     results = []
     for seq in _load_sequences_from_files(specs.test_files, specs.u_cols, specs.y_cols):
-        y_pred = model(seq.u, seq.y[: specs.init_window])
+        model_seq = Sequence(seq.u, seq.y[: specs.init_window], seq.attrs)
+        y_pred = model(*model_seq)
         y_test_win = seq.y[specs.init_window :]
         y_pred = y_pred[-y_test_win.shape[0] :]
         results.append((y_pred, y_test_win))
@@ -231,10 +232,11 @@ def _test_prediction(specs, model):
         # iterate through windows of u_test and y_test
         window_results = []
         for i in range(0, seq.u.shape[0] - specs.init_window - specs.pred_horizon, specs.pred_step):
-            u_test_win = seq.u[i : i + specs.init_window + specs.pred_horizon]
-            y_test_win = seq.y[i : i + specs.init_window + specs.pred_horizon]
-            y_pred = model(u_test_win, y_test_win[: specs.init_window])
-            window_results.append((y_pred, y_test_win))
+            u_win = seq.u[i : i + specs.init_window + specs.pred_horizon]
+            y_win = seq.y[i : i + specs.init_window + specs.pred_horizon]
+            model_seq = Sequence(u_win, y_win[: specs.init_window], seq.attrs)
+            y_pred = model(*model_seq)
+            window_results.append((y_pred, y_win))
         results.append(window_results)
     return results
 
@@ -389,9 +391,9 @@ def run_benchmark(spec, build_model, hyperparameters={}, seed=None):
 def _dummy_build_model(context):
     print(f"Building model with spec: {context.spec.name}, seed: {context.seed}")
 
-    def dummy_model(u_test, y_test):
+    def dummy_model(u, y, attrs):
         output_dim = len(context.spec.y_cols)
-        return np.zeros((u_test.shape[0], output_dim))
+        return np.zeros((u.shape[0], output_dim))
 
     return dummy_model  # Return the callable model
 

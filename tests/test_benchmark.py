@@ -62,7 +62,7 @@ def pred_spec(dummy_dataset_path):
 def dummy_build_model(context):
     output_dim = len(context.spec.y_cols)
 
-    def model(u, y_init):
+    def model(u, y, attrs):
         return np.zeros((u.shape[0], output_dim))
 
     return model
@@ -251,7 +251,7 @@ class TestTrainingContext:
 
 class TestSimulation:
     def test_returns_correct_structure(self, sim_spec):
-        model = lambda u, y_init: np.zeros((u.shape[0], 1))
+        model = lambda u, y, attrs: np.zeros((u.shape[0], 1))
         results = _test_simulation(sim_spec, model)
         assert len(results) == 2  # 2 test files
         for y_pred, y_test in results:
@@ -259,14 +259,14 @@ class TestSimulation:
             assert isinstance(y_test, np.ndarray)
 
     def test_windowing(self, sim_spec):
-        model = lambda u, y_init: np.zeros((u.shape[0], 1))
+        model = lambda u, y, attrs: np.zeros((u.shape[0], 1))
         results = _test_simulation(sim_spec, model)
         for y_pred, y_test in results:
             # y_test should have init_window removed: 50 - 5 = 45
             assert y_test.shape[0] == 45
 
     def test_perfect_model(self, sim_spec):
-        def perfect_model(u, y_init):
+        def perfect_model(u, y, attrs):
             # Load the full y for this sequence to return perfect predictions
             # The model receives full u and y_init (first init_window steps)
             # It should return predictions for all timesteps, but only the last
@@ -286,7 +286,7 @@ class TestSimulation:
 
 class TestPrediction:
     def test_returns_nested_structure(self, pred_spec):
-        model = lambda u, y_init: np.zeros((u.shape[0], 1))
+        model = lambda u, y, attrs: np.zeros((u.shape[0], 1))
         results = _test_prediction(pred_spec, model)
         assert len(results) == 2  # 2 test files
         for window_results in results:
@@ -295,7 +295,7 @@ class TestPrediction:
                 assert isinstance(y_pred, np.ndarray)
 
     def test_window_count(self, pred_spec):
-        model = lambda u, y_init: np.zeros((u.shape[0], 1))
+        model = lambda u, y, attrs: np.zeros((u.shape[0], 1))
         results = _test_prediction(pred_spec, model)
         seq_len = 50
         expected_windows = len(range(0, seq_len - pred_spec.init_window - pred_spec.pred_horizon, pred_spec.pred_step))
