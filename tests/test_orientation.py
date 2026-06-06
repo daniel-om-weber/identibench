@@ -69,6 +69,33 @@ def test_riann_eval_masks_and_groups(tmp_path):
     assert scores_unmasked["Caruso-Sassari/incl_rmse_deg"] > 1.0
 
 
+# ───────────────────────── quaternion sign flips ─────────────────────────
+
+
+def test_fix_quaternion_flips_corrects_sign_flip():
+    # A smooth, near-constant quaternion track with a single sign flip injected
+    # halfway through. q and -q are the same rotation; the flip must be undone.
+    q = np.tile([1.0, 0.0, 0.0, 0.0], (10, 1)).astype(np.float64)
+    flipped = q.copy()
+    flipped[5:] *= -1.0
+
+    corrected = _common.fix_quaternion_flips(flipped)
+
+    np.testing.assert_allclose(corrected, q)
+    # Original input must be left untouched (function copies).
+    assert flipped[5, 0] == -1.0
+
+
+def test_fix_quaternion_flips_leaves_smooth_track_unchanged():
+    # Small incremental rotations about x: consecutive quaternions stay close, so
+    # every step is below the threshold and nothing should be flipped.
+    angles = np.linspace(0.0, 30.0, 50)
+    q = np.stack([_quat_x(a) for a in angles])
+    assert np.max(np.linalg.norm(np.diff(q, axis=0), axis=1)) < 1.0  # genuinely smooth
+    corrected = _common.fix_quaternion_flips(q)
+    np.testing.assert_allclose(corrected, q)
+
+
 # ───────────────────────── wiring / splits ─────────────────────────
 
 
@@ -98,6 +125,7 @@ def test_run_benchmark_end_to_end(tmp_path, monkeypatch):
     def build_model(context):
         def model(u, y_init, attrs):
             return np.tile([1.0, 0.0, 0.0, 0.0], (len(u), 1)).astype(np.float32)
+
         return model
 
     result = idb.run_benchmark(R.BenchmarkRIANN_Inclination, build_model, seed=0)
@@ -163,6 +191,7 @@ def test_repoimu_download_and_eval(tmp_path, monkeypatch):
     def build_model(context):
         def model(u, y_init, attrs):
             return np.tile([1.0, 0.0, 0.0, 0.0], (len(u), 1)).astype(np.float32)
+
         return model
 
     result = idb.run_benchmark(idb.BenchmarkRepoIMU_Inclination, build_model, seed=0)

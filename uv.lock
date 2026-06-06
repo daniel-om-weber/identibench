@@ -949,9 +949,6 @@ wheels = [
 name = "identibench"
 source = { editable = "." }
 dependencies = [
-    { name = "bagpy" },
-    { name = "easydataverse" },
-    { name = "gdown" },
     { name = "h5py" },
     { name = "nonlinear-benchmarks" },
     { name = "numpy" },
@@ -962,6 +959,11 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "bagpy" },
+    { name = "easydataverse" },
+    { name = "gdown" },
+]
 dev = [
     { name = "ipykernel" },
     { name = "jupytext" },
@@ -972,12 +974,22 @@ dev = [
     { name = "ruff" },
     { name = "twine" },
 ]
+quad = [
+    { name = "bagpy" },
+    { name = "gdown" },
+]
+ship = [
+    { name = "easydataverse" },
+]
 
 [package.metadata]
 requires-dist = [
-    { name = "bagpy" },
-    { name = "easydataverse", specifier = ">=0.4.4" },
-    { name = "gdown" },
+    { name = "bagpy", marker = "extra == 'all'" },
+    { name = "bagpy", marker = "extra == 'quad'" },
+    { name = "easydataverse", marker = "extra == 'all'", specifier = ">=0.4.4" },
+    { name = "easydataverse", marker = "extra == 'ship'", specifier = ">=0.4.4" },
+    { name = "gdown", marker = "extra == 'all'" },
+    { name = "gdown", marker = "extra == 'quad'" },
     { name = "h5py" },
     { name = "ipykernel", marker = "extra == 'dev'" },
     { name = "jupytext", marker = "extra == 'dev'", specifier = ">=1.19.3" },
@@ -994,7 +1006,7 @@ requires-dist = [
     { name = "tqdm" },
     { name = "twine", marker = "extra == 'dev'" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["all", "dev", "quad", "ship"]
 
 [[package]]
 name = "idna"

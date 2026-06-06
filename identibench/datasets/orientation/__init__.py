@@ -14,7 +14,7 @@ one home:
   cross-dataset-test protocol.
 
 Quaternion target columns are ``q_w, q_x, q_y, q_z`` across all datasets; the
-download/conversion helpers live in the private :mod:`._prep` package.
+download/conversion helpers live in the private :mod:`._common` module.
 """
 
 from .dfjimu import (
@@ -35,7 +35,7 @@ from .riann import (
     BenchmarkRIANN_Inclination,
 )
 
-# All orientation benchmarks in one registry (mirrors ``workshop_benchmarks``).
+# All orientation benchmarks in one registry (mirrors ``simulation_benchmarks``).
 orientation_benchmarks = {
     "DFJIMU_Inclination": BenchmarkDFJIMU_Inclination,
     "DFJIMU_Relative": BenchmarkDFJIMU_Relative,

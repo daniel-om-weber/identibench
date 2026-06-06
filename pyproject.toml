@@ -24,10 +24,7 @@ classifiers = [
 dependencies = [
     "nonlinear-benchmarks",
     "h5py",
-    "easyDataverse>=0.4.4",
     "pandas",
-    "gdown",
-    "bagpy",
     "numpy",
     "scipy",
     "requests",
@@ -35,6 +32,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+ship = ["easyDataverse>=0.4.4"]
+quad = ["bagpy", "gdown"]
+all = ["easyDataverse>=0.4.4", "bagpy", "gdown"]
 dev = [
     "pytest",
     "pytest-cov",
@@ -57,10 +57,13 @@ packages = ["identibench"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["slow: marks tests that download real data (deselect with '-m \"not slow\"')"]
+markers = ["slow: marks tests that download real data (skipped by default; run with '--slow')"]
 
 [tool.ruff]
 line-length = 120
 
 [tool.ruff.lint]
-ignore = ["F401", "F403", "F405", "F811", "E401", "E402", "E701", "E702", "E731"]
+ignore = ["E401", "E402", "E701", "E702", "E731"]
+
+[tool.coverage.run]
+source = ["identibench"]

@@ -153,24 +153,18 @@ class TestBenchmarkSpecProperties:
 
 class TestLoadSequences:
     def test_load_sequences_shape(self, sim_spec):
-        sequences = list(
-            _load_sequences_from_files(sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols)
-        )
+        sequences = list(_load_sequences_from_files(sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols))
         seq = sequences[0]
         assert seq.u.shape == (50, 2)
         assert seq.y.shape == (50, 1)
 
     def test_load_sequences_yields_all_files(self, sim_spec):
-        sequences = list(
-            _load_sequences_from_files(sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols)
-        )
+        sequences = list(_load_sequences_from_files(sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols))
         assert len(sequences) == 2
 
     def test_load_sequences_windowing(self, sim_spec):
         sequences = list(
-            _load_sequences_from_files(
-                sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols, win_sz=20, stp_sz=10
-            )
+            _load_sequences_from_files(sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols, win_sz=20, stp_sz=10)
         )
         for seq in sequences:
             assert seq.u.shape == (20, 2)
@@ -179,26 +173,20 @@ class TestLoadSequences:
         assert len(sequences) == 2 * 4
 
     def test_load_sequences_attrs(self, sim_spec):
-        sequences = list(
-            _load_sequences_from_files(sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols)
-        )
+        sequences = list(_load_sequences_from_files(sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols))
         assert "fs" in sequences[0].attrs
         assert sequences[0].attrs["fs"] == 10.0
 
     def test_load_sequences_windowed_attrs_shared(self, sim_spec):
         sequences = list(
-            _load_sequences_from_files(
-                sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols, win_sz=20, stp_sz=10
-            )
+            _load_sequences_from_files(sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols, win_sz=20, stp_sz=10)
         )
         # All windows from the same file should have the same attrs
         for seq in sequences:
             assert seq.attrs["fs"] == 10.0
 
     def test_load_sequences_unpacking(self, sim_spec):
-        sequences = list(
-            _load_sequences_from_files(sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols)
-        )
+        sequences = list(_load_sequences_from_files(sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols))
         u, y, attrs = sequences[0]
         assert u.shape == (50, 2)
         assert isinstance(attrs, dict)
@@ -209,19 +197,11 @@ class TestLoadSequences:
 
     def test_load_sequences_win_without_step_raises(self, sim_spec):
         with pytest.raises(ValueError):
-            list(
-                _load_sequences_from_files(
-                    sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols, win_sz=20
-                )
-            )
+            list(_load_sequences_from_files(sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols, win_sz=20))
 
     def test_load_sequences_step_without_win_raises(self, sim_spec):
         with pytest.raises(ValueError):
-            list(
-                _load_sequences_from_files(
-                    sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols, stp_sz=10
-                )
-            )
+            list(_load_sequences_from_files(sim_spec.train_files, sim_spec.u_cols, sim_spec.y_cols, stp_sz=10))
 
 
 # --- TrainingContext ---
@@ -245,6 +225,13 @@ class TestTrainingContext:
         sequences = list(ctx.get_train_valid_sequences())
         assert len(sequences) == 4  # train + valid combined
 
+    def test_test_sequences(self, sim_spec):
+        ctx = TrainingContext(spec=sim_spec, hyperparameters={})
+        sequences = list(ctx.get_test_sequences())
+        assert len(sequences) == 2
+        assert sequences[0].u.shape == (50, 2)
+        assert "fs" in sequences[0].attrs
+
 
 # --- Simulation testing ---
 
@@ -266,19 +253,19 @@ class TestSimulation:
             assert y_test.shape[0] == 45
 
     def test_perfect_model(self, sim_spec):
-        def perfect_model(u, y, attrs):
-            # Load the full y for this sequence to return perfect predictions
-            # The model receives full u and y_init (first init_window steps)
-            # It should return predictions for all timesteps, but only the last
-            # (seq_len - init_window) are compared
-            return np.zeros((u.shape[0], 1))  # placeholder
+        # Precompute the full y for each test sequence (in file order) so the
+        # model can return the ground truth and drive the metric to ~0.
+        full_ys = [seq.y for seq in _load_sequences_from_files(sim_spec.test_files, sim_spec.u_cols, sim_spec.y_cols)]
+        next_y = iter(full_ys)
 
-        # Instead, use a model that echoes the test data back
-        # We need to verify structure, not perfection — that requires knowing y_test
+        def perfect_model(u, y, attrs):
+            return next(next_y)
+
         results = _test_simulation(sim_spec, perfect_model)
+        assert len(results) == len(full_ys)
         for y_pred, y_test in results:
             score = rmse(y_pred, y_test)
-            assert np.isfinite(score)
+            np.testing.assert_allclose(score, 0.0, atol=1e-10)
 
 
 # --- Prediction testing ---
@@ -337,6 +324,15 @@ class TestRunBenchmark:
         sim_spec.custom_test_evaluation = custom_eval
         result = run_benchmark(sim_spec, dummy_build_model)
         assert result["custom_scores"]["extra_metric"] == 42.0
+
+    def test_seed_is_echoed(self, sim_spec):
+        result = run_benchmark(sim_spec, dummy_build_model, seed=12345)
+        assert result["seed"] == 12345
+
+    def test_seed_defaults_to_non_none(self, sim_spec):
+        result = run_benchmark(sim_spec, dummy_build_model)
+        assert result["seed"] is not None
+        assert isinstance(result["seed"], int)
 
 
 # --- run_benchmarks ---
@@ -452,6 +448,40 @@ class TestAggregateBenchmarkResults:
         agg = aggregate_benchmark_results(df)
         assert agg.empty
 
+    def test_custom_agg_funcs(self):
+        df = pd.DataFrame(
+            {
+                "benchmark_name": ["A", "A", "B"],
+                "metric_score": [1.0, 3.0, 5.0],
+            }
+        )
+        agg = aggregate_benchmark_results(df, agg_funcs=["mean", "std"])
+        assert agg.loc["A", ("metric_score", "mean")] == 2.0
+        np.testing.assert_allclose(agg.loc["A", ("metric_score", "std")], np.std([1.0, 3.0], ddof=1))
+
+    def test_no_aggregatable_numeric_columns(self):
+        # Only the group key and excluded identifier columns are numeric.
+        df = pd.DataFrame(
+            {
+                "benchmark_name": ["A", "B"],
+                "seed": [1, 2],
+            }
+        )
+        agg = aggregate_benchmark_results(df)
+        assert isinstance(agg, pd.DataFrame)
+        assert agg.empty
+
+    def test_group_by_missing_column_returns_empty(self):
+        df = pd.DataFrame(
+            {
+                "benchmark_name": ["A", "B"],
+                "metric_score": [1.0, 2.0],
+            }
+        )
+        agg = aggregate_benchmark_results(df, group_by_cols="does_not_exist")
+        assert isinstance(agg, pd.DataFrame)
+        assert agg.empty
+
 
 # --- aggregate_metric_score ---
 
@@ -480,6 +510,16 @@ class TestAggregateMetricScore:
         scores = aggregate_metric_score(test_results, rmse, score_name="my_metric")
         assert "my_metric" in scores
 
+    def test_empty_results_returns_nan(self):
+        scores = aggregate_metric_score([], rmse)
+        assert "rmse" in scores
+        assert np.isnan(scores["rmse"])
+
+    def test_empty_results_respects_score_name(self):
+        scores = aggregate_metric_score([], rmse, score_name="metric_score")
+        assert set(scores) == {"metric_score"}
+        assert np.isnan(scores["metric_score"])
+
 
 # --- Split-based file resolution tests ---
 
@@ -494,8 +534,13 @@ class TestSplitBasedFileResolution:
                 f.create_dataset("y0", data=np.zeros(10, dtype=np.float32))
 
         spec = BenchmarkSpecSimulation(
-            name="TestFlat", dataset_id="flat_ds", u_cols=["u0"], y_cols=["y0"],
-            metric_func=rmse, init_window=0, data_root=tmp_path,
+            name="TestFlat",
+            dataset_id="flat_ds",
+            u_cols=["u0"],
+            y_cols=["y0"],
+            metric_func=rmse,
+            init_window=0,
+            data_root=tmp_path,
             split={"train": ["a.hdf5"], "valid": ["b.hdf5"], "test": ["c.hdf5"]},
         )
         assert len(spec.train_files) == 1
@@ -517,8 +562,12 @@ class TestSplitBasedFileResolution:
                 f.create_dataset("u0", data=np.zeros(10, dtype=np.float32))
 
         spec = BenchmarkSpecSimulation(
-            name="TestTV", dataset_id="tv_ds", u_cols=["u0"], y_cols=["y0"],
-            metric_func=rmse, data_root=tmp_path,
+            name="TestTV",
+            dataset_id="tv_ds",
+            u_cols=["u0"],
+            y_cols=["y0"],
+            metric_func=rmse,
+            data_root=tmp_path,
             split={"train": ["a.hdf5"], "valid": ["b.hdf5"], "test": []},
         )
         assert len(spec.train_valid_files) == 2
@@ -527,8 +576,12 @@ class TestSplitBasedFileResolution:
         ds_dir = tmp_path / "empty_ds"
         ds_dir.mkdir()
         spec = BenchmarkSpecSimulation(
-            name="TestEmpty", dataset_id="empty_ds", u_cols=["u0"], y_cols=["y0"],
-            metric_func=rmse, data_root=tmp_path,
+            name="TestEmpty",
+            dataset_id="empty_ds",
+            u_cols=["u0"],
+            y_cols=["y0"],
+            metric_func=rmse,
+            data_root=tmp_path,
             split={"train": [], "valid": [], "test": []},
         )
         assert spec.train_files == []
@@ -542,10 +595,14 @@ class TestSplitBasedFileResolution:
             f.create_dataset("u0", data=np.zeros(10, dtype=np.float32))
 
         spec = BenchmarkSpecPrediction(
-            name="TestPredSplit", dataset_id="pred_ds", u_cols=["u0"], y_cols=["y0"],
-            metric_func=rmse, pred_horizon=5, pred_step=5, data_root=tmp_path,
+            name="TestPredSplit",
+            dataset_id="pred_ds",
+            u_cols=["u0"],
+            y_cols=["y0"],
+            metric_func=rmse,
+            pred_horizon=5,
+            pred_step=5,
+            data_root=tmp_path,
             split={"test": ["x.hdf5"]},
         )
         assert len(spec.test_files) == 1
-
-

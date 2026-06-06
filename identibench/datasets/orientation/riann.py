@@ -11,9 +11,9 @@ paper's train/valid/test roles across them.
 Data format and evaluation are shared with the per-source datasets and live in
 :mod:`._common`: each file holds 1-D float32 ``acc_x..acc_z`` (m/s²),
 ``gyr_x..gyr_z`` (rad/s), ``dt`` (s), the ground-truth quaternion ``q_w..q_z``,
-and a ``movement_mask``. The headline ``metric_func`` is the aligned-but-unmasked
-inclination RMSE; the faithful masked + 99th-percentile per-source numbers come
-from :func:`._common.riann_eval` (re-exported here) via
+and a ``movement_mask``. The headline ``metric_func`` is the first-sample-aligned
+(unmasked) inclination RMSE; the faithful masked + 99th-percentile per-source
+numbers come from :func:`._common.riann_eval` (re-exported here) via
 ``custom_test_evaluation`` and surface as ``cs_*`` columns.
 """
 

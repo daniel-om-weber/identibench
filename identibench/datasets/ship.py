@@ -3,8 +3,8 @@
 __all__ = ["ship_u", "ship_y", "BenchmarkShip_Simulation", "BenchmarkShip_Prediction", "dl_ship"]
 
 from nonlinear_benchmarks.utilities import get_tmp_benchmark_directory
-import identibench.benchmark as idb
 import identibench.metrics
+from ._common import make_sim_pred
 from pathlib import Path
 import os
 import h5py
@@ -25,7 +25,12 @@ def dl_ship(
         print(f"Force reload: Removing existing directory: {download_dir}")
         shutil.rmtree(download_dir)
 
-    from easyDataverse import Dataverse
+    try:
+        from easyDataverse import Dataverse
+    except ImportError as e:
+        raise ImportError(
+            'easyDataverse is required for the Ship dataset. Install it with: pip install "identibench[ship]"'
+        ) from e
 
     dataverse = Dataverse("https://darus.uni-stuttgart.de/")
     dataverse.load_dataset(
@@ -79,17 +84,8 @@ def dl_ship(
 ship_u = ["n", "deltal", "deltar", "Vw"]
 ship_y = ["alpha_x", "alpha_y", "u", "v", "p", "r", "phi"]
 
-BenchmarkShip_Simulation = idb.BenchmarkSpecSimulation(
-    name="BenchmarkShip_Simulation",
-    dataset_id="ship",
-    u_cols=ship_u,
-    y_cols=ship_y,
-    metric_func=identibench.metrics.rmse,
-    download_func=dl_ship,
-    init_window=100,
-)
-BenchmarkShip_Prediction = idb.BenchmarkSpecPrediction(
-    name="BenchmarkShip_Prediction",
+BenchmarkShip_Simulation, BenchmarkShip_Prediction = make_sim_pred(
+    name_base="BenchmarkShip",
     dataset_id="ship",
     u_cols=ship_u,
     y_cols=ship_y,

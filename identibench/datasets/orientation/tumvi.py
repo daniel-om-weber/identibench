@@ -20,10 +20,10 @@ from ._common import (
     _prepare,
     _spec,
     _test_role,
-    fix_quaternion_flips,
     write_hdf5,
 )
 
+_RAW_DIR = "tumvi"  # cache sub-directory under raw_dir for downloads + extraction
 SOURCE_DIR = "TUM-VI"  # sub-directory convert() writes into / routing key
 
 _BASE = "https://cvg.cit.tum.de/tumvi/exported/euroc/512_16"
@@ -33,7 +33,7 @@ _NEEDED = {"imu.txt", "gt_imu.csv"}
 
 def download(raw_dir: Path, force: bool = False) -> None:
     """Stream each tar and extract only imu.txt + gt_imu.csv (skip camera data)."""
-    raw_dir = raw_dir / "tumvi"
+    raw_dir = raw_dir / _RAW_DIR
     for n in _ROOMS:
         seq_name = f"dataset-room{n}_512_16"
         ext_dir = raw_dir / seq_name / "dso"
@@ -90,8 +90,8 @@ class _ProgressReader:
 
 
 def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
-    raw_dir = raw_dir / "tumvi"
-    out_dir = out_dir / "TUM-VI"
+    raw_dir = raw_dir / _RAW_DIR
+    out_dir = out_dir / SOURCE_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for n in _ROOMS:
@@ -159,6 +159,9 @@ def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
         merged.loc[imu_ts > gt_ts[-1], quat_cols] = np.nan
 
         # ── Quaternion flip correction (skip NaN) ──
+        # Not _common.fix_quaternion_flips: that compares every consecutive pair,
+        # so the NaN gaps masked in above would poison the comparison at gap
+        # boundaries. Here we step only across non-NaN indices instead.
         quat = merged[quat_cols].values
         valid = np.where(~np.isnan(quat[:, 0]))[0]
         for i in range(1, len(valid)):

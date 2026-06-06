@@ -13,16 +13,15 @@ Sampling rate: 100 Hz.
 import re
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from ._common import _prepare, _spec, _test_role, download_file, extract_archive, fix_quaternion_flips, write_hdf5
 
 _REPO_ZIP = "https://github.com/agnieszkaszczesna/RepoIMU/archive/refs/heads/master.zip"
+_RAW_DIR = "repoimu"  # cache sub-directory under raw_dir for downloads + extraction
 SOURCE_DIR = "RepoIMU"  # sub-directory convert() writes into / routing key
 
-# Expected output files (derived from existing Myon HDF5 directory listing).
-# Maps (test_num, trial_num) → output name.
+# (test_num, trial_num) pairs to convert — the trials present in the dataset.
 EXPECTED_TRIALS: set[tuple[int, int]] = {
     (2, 1),
     (2, 2),
@@ -66,13 +65,13 @@ _COL_NAMES = [
 
 
 def download(raw_dir: Path, force: bool = False) -> None:
-    raw_dir = raw_dir / "repoimu"
+    raw_dir = raw_dir / _RAW_DIR
     download_file(_REPO_ZIP, raw_dir / "RepoIMU-master.zip", force=force)
 
 
 def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
-    raw_dir = raw_dir / "repoimu"
-    out_dir = out_dir / "RepoIMU"
+    raw_dir = raw_dir / _RAW_DIR
+    out_dir = out_dir / SOURCE_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
 
     zip_path = raw_dir / "RepoIMU-master.zip"

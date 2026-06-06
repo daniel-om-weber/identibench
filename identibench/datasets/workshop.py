@@ -21,7 +21,8 @@ __all__ = [
     "dl_ced",
 ]
 
-from ..utils import *
+from ..utils import dataset_to_hdf5, iodata_to_hdf5
+from ._common import dl_split_by_index, make_sim_pred
 import identibench.benchmark as idb
 import identibench.metrics
 import nonlinear_benchmarks
@@ -37,28 +38,17 @@ def dl_wiener_hammerstein(
     save_train_valid: bool = True,  # save unsplitted train and valid datasets in 'train_valid' subdirectory
     split_idx: int = 80_000,  # split index for train and valid datasets
 ) -> None:
-    train_val, test = nonlinear_benchmarks.WienerHammerBenchMark(force_download=force_download)
-    train = train_val[:split_idx]
-    valid = train_val[split_idx:]
-
-    dataset_to_hdf5(train, valid, test, save_path, train_valid=(train_val if save_train_valid else None))
+    dl_split_by_index(
+        nonlinear_benchmarks.WienerHammerBenchMark, save_path, force_download, save_train_valid, split_idx
+    )
 
 
 def rmse_mV(inp: np.ndarray, targ: np.ndarray) -> float:
     return identibench.metrics.rmse(inp, targ) * 1000
 
 
-BenchmarkWH_Simulation = idb.BenchmarkSpecSimulation(
-    name="BenchmarkWH_Simulation",
-    dataset_id="wh",
-    u_cols=["u0"],
-    y_cols=["y0"],
-    metric_func=rmse_mV,
-    download_func=dl_wiener_hammerstein,
-    init_window=50,
-)
-BenchmarkWH_Prediction = idb.BenchmarkSpecPrediction(
-    name="BenchmarkWH_Prediction",
+BenchmarkWH_Simulation, BenchmarkWH_Prediction = make_sim_pred(
+    name_base="BenchmarkWH",
     dataset_id="wh",
     u_cols=["u0"],
     y_cols=["y0"],
@@ -76,11 +66,7 @@ def dl_silverbox(
     save_train_valid: bool = True,  # save unsplitted train and valid datasets in 'train_valid' subdirectory
     split_idx: int = 50_000,  # split index for train and valid datasets
 ) -> None:
-    train_val, test = nonlinear_benchmarks.Silverbox(force_download=force_download)
-    train = train_val[:split_idx]
-    valid = train_val[split_idx:]
-
-    dataset_to_hdf5(train, valid, test, save_path, train_valid=(train_val if save_train_valid else None))
+    dl_split_by_index(nonlinear_benchmarks.Silverbox, save_path, force_download, save_train_valid, split_idx)
 
 
 def evaluate_silverbox(results: list[tuple[np.ndarray, np.ndarray]], spec: idb.BenchmarkSpecBase) -> dict[str, float]:
@@ -100,27 +86,17 @@ def evaluate_silverbox(results: list[tuple[np.ndarray, np.ndarray]], spec: idb.B
     return aggregated_scores
 
 
-BenchmarkSilverbox_Simulation = idb.BenchmarkSpecSimulation(
-    name="BenchmarkSilverbox_Simulation",
+BenchmarkSilverbox_Simulation, BenchmarkSilverbox_Prediction = make_sim_pred(
+    name_base="BenchmarkSilverbox",
     dataset_id="silverbox",
     u_cols=["u0"],
     y_cols=["y0"],
     metric_func=rmse_mV,
     download_func=dl_silverbox,
-    custom_test_evaluation=evaluate_silverbox,
-    init_window=50,
-)
-BenchmarkSilverbox_Prediction = idb.BenchmarkSpecPrediction(
-    name="BenchmarkSilverbox_Prediction",
-    dataset_id="silverbox",
-    u_cols=["u0"],
-    y_cols=["y0"],
-    metric_func=rmse_mV,
-    download_func=dl_silverbox,
-    custom_test_evaluation=evaluate_silverbox,
     init_window=50,
     pred_horizon=100,
     pred_step=100,
+    custom_test_evaluation=evaluate_silverbox,
 )
 
 
@@ -130,24 +106,19 @@ def dl_cascaded_tanks(
     save_train_valid: bool = True,  # save unsplitted train and valid datasets in 'train_valid' subdirectory
     split_idx: int = 160,  # split index for train and valid datasets
 ) -> None:
-    train_val, test = nonlinear_benchmarks.Cascaded_Tanks(force_download=force_download)
-    train = train_val[split_idx:]
-    valid = train_val[:split_idx]
+    # cascaded_tanks uses the reversed split: train=train_val[split_idx:], valid=train_val[:split_idx]
+    dl_split_by_index(
+        nonlinear_benchmarks.Cascaded_Tanks,
+        save_path,
+        force_download,
+        save_train_valid,
+        split_idx,
+        reversed_split=True,
+    )
 
-    dataset_to_hdf5(train, valid, test, save_path, train_valid=(train_val if save_train_valid else None))
 
-
-BenchmarkCascadedTanks_Simulation = idb.BenchmarkSpecSimulation(
-    name="BenchmarkCascadedTanks_Simulation",
-    dataset_id="cascaded_tanks",
-    u_cols=["u0"],
-    y_cols=["y0"],
-    metric_func=identibench.metrics.rmse,
-    download_func=dl_cascaded_tanks,
-    init_window=50,
-)
-BenchmarkCascadedTanks_Prediction = idb.BenchmarkSpecPrediction(
-    name="BenchmarkCascadedTanks_Prediction",
+BenchmarkCascadedTanks_Simulation, BenchmarkCascadedTanks_Prediction = make_sim_pred(
+    name_base="BenchmarkCascadedTanks",
     dataset_id="cascaded_tanks",
     u_cols=["u0"],
     y_cols=["y0"],
@@ -165,24 +136,11 @@ def dl_emps(
     save_train_valid: bool = True,  # save unsplitted train and valid datasets in 'train_valid' subdirectory
     split_idx: int = 18_000,  # split index for train and valid datasets
 ) -> None:
-    train_val, test = nonlinear_benchmarks.EMPS(force_download=force_download)
-    train = train_val[:split_idx]
-    valid = train_val[split_idx:]
-
-    dataset_to_hdf5(train, valid, test, save_path, train_valid=(train_val if save_train_valid else None))
+    dl_split_by_index(nonlinear_benchmarks.EMPS, save_path, force_download, save_train_valid, split_idx)
 
 
-BenchmarkEMPS_Simulation = idb.BenchmarkSpecSimulation(
-    name="BenchmarkEMPS_Simulation",
-    dataset_id="emps",
-    u_cols=["u0"],
-    y_cols=["y0"],
-    metric_func=rmse_mV,
-    download_func=dl_emps,
-    init_window=20,
-)
-BenchmarkEMPS_Prediction = idb.BenchmarkSpecPrediction(
-    name="BenchmarkEMPS_Prediction",
+BenchmarkEMPS_Simulation, BenchmarkEMPS_Prediction = make_sim_pred(
+    name_base="BenchmarkEMPS",
     dataset_id="emps",
     u_cols=["u0"],
     y_cols=["y0"],
@@ -229,22 +187,15 @@ def dl_noisy_wh(
             iodata_to_hdf5(iodata, hdf_path, fname)
     if save_train_valid:
         # copy train and valid files to train_valid directory
+        train_valid_dir = Path(save_path) / "train_valid"
+        train_valid_dir.mkdir(exist_ok=True)
         for d in ["train", "valid"]:
             for f in (Path(save_path) / d).glob("*.hdf5"):
-                shutil.copy2(f, (p := Path(save_path) / "train_valid").mkdir(exist_ok=True) or p)
+                shutil.copy2(f, train_valid_dir)
 
 
-BenchmarkNoisyWH_Simulation = idb.BenchmarkSpecSimulation(
-    name="BenchmarkNoisyWH_Simulation",
-    dataset_id="noisy_wh",
-    u_cols=["u0"],
-    y_cols=["y0"],
-    metric_func=rmse_mV,
-    download_func=dl_noisy_wh,
-    init_window=100,
-)
-BenchmarkNoisyWH_Prediction = idb.BenchmarkSpecPrediction(
-    name="BenchmarkNoisyWH_Prediction",
+BenchmarkNoisyWH_Simulation, BenchmarkNoisyWH_Prediction = make_sim_pred(
+    name_base="BenchmarkNoisyWH",
     dataset_id="noisy_wh",
     u_cols=["u0"],
     y_cols=["y0"],
@@ -284,25 +235,15 @@ def evaluate_ced(results: list[tuple[np.ndarray, np.ndarray]], spec: idb.Benchma
     return aggregated_scores
 
 
-BenchmarkCED_Simulation = idb.BenchmarkSpecSimulation(
-    name="BenchmarkCED_Simulation",
+BenchmarkCED_Simulation, BenchmarkCED_Prediction = make_sim_pred(
+    name_base="BenchmarkCED",
     dataset_id="ced",
     u_cols=["u0"],
     y_cols=["y0"],
     metric_func=identibench.metrics.rmse,
     download_func=dl_ced,
-    custom_test_evaluation=evaluate_ced,
-    init_window=10,
-)
-BenchmarkCED_Prediction = idb.BenchmarkSpecPrediction(
-    name="BenchmarkCED_Prediction",
-    dataset_id="ced",
-    u_cols=["u0"],
-    y_cols=["y0"],
-    metric_func=identibench.metrics.rmse,
-    download_func=dl_ced,
-    custom_test_evaluation=evaluate_ced,
     init_window=10,
     pred_horizon=30,
     pred_step=30,
+    custom_test_evaluation=evaluate_ced,
 )

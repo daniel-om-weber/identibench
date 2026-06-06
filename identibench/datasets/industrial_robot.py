@@ -14,7 +14,7 @@ __all__ = [
 ]
 
 from ..utils import write_dataset, write_array
-import identibench.benchmark as idb
+from ._common import make_sim_pred
 import identibench.metrics
 from nonlinear_benchmarks.utilities import cashed_download
 from pathlib import Path
@@ -22,6 +22,9 @@ import os
 import h5py
 import numpy as np
 import scipy.io as sio
+
+# Robot Identification Benchmark archive (shared by the forward and inverse downloaders).
+ROBOT_URL = "https://fdm-fallback.uni-kl.de/TUK/FB/MV/WSKL/0001/Robot_Identification_Benchmark_Without_Raw_Data.rar"
 
 
 def robot_mat2hdf(
@@ -70,9 +73,8 @@ def dl_robot_forward(
     force_download: bool = False,  # force download the dataset
 ) -> None:
     save_path = Path(save_path)
-    url_robot = "https://fdm-fallback.uni-kl.de/TUK/FB/MV/WSKL/0001/Robot_Identification_Benchmark_Without_Raw_Data.rar"
 
-    tmp_dir = cashed_download(url_robot, "Industrial_robot", force_download=force_download)
+    tmp_dir = cashed_download(ROBOT_URL, "Industrial_robot", force_download=force_download)
     tmp_dir = Path(tmp_dir)
 
     path_forward = tmp_dir / "forward_identification_without_raw_data.mat"
@@ -83,17 +85,8 @@ def dl_robot_forward(
 u_forward = [f"u{i}" for i in range(0, 6)]
 y_forward = [f"y{i}" for i in range(0, 6)]
 
-BenchmarkRobotForward_Simulation = idb.BenchmarkSpecSimulation(
-    name="BenchmarkRobotForward_Simulation",
-    dataset_id="robot_forward",
-    u_cols=u_forward,
-    y_cols=y_forward,
-    metric_func=identibench.metrics.rmse,
-    download_func=dl_robot_forward,
-    init_window=100,
-)
-BenchmarkRobotForward_Prediction = idb.BenchmarkSpecPrediction(
-    name="BenchmarkRobotForward_Prediction",
+BenchmarkRobotForward_Simulation, BenchmarkRobotForward_Prediction = make_sim_pred(
+    name_base="BenchmarkRobotForward",
     dataset_id="robot_forward",
     u_cols=u_forward,
     y_cols=y_forward,
@@ -110,9 +103,8 @@ def dl_robot_inverse(
     force_download: bool = False,  # force download the dataset
 ) -> None:
     save_path = Path(save_path)
-    url_robot = "https://fdm-fallback.uni-kl.de/TUK/FB/MV/WSKL/0001/Robot_Identification_Benchmark_Without_Raw_Data.rar"
 
-    tmp_dir = cashed_download(url_robot, "Industrial_robot", force_download=force_download)
+    tmp_dir = cashed_download(ROBOT_URL, "Industrial_robot", force_download=force_download)
     tmp_dir = Path(tmp_dir)
 
     path_inverse = tmp_dir / "inverse_identification_without_raw_data.mat"
@@ -123,17 +115,8 @@ def dl_robot_inverse(
 u_inverse = [f"u{i}" for i in range(0, 12)]
 y_inverse = [f"y{i}" for i in range(0, 6)]
 
-BenchmarkRobotInverse_Simulation = idb.BenchmarkSpecSimulation(
-    name="BenchmarkRobotInverse_Simulation",
-    dataset_id="robot_inverse",
-    u_cols=u_inverse,
-    y_cols=y_inverse,
-    metric_func=identibench.metrics.rmse,
-    download_func=dl_robot_inverse,
-    init_window=100,
-)
-BenchmarkRobotInverse_Prediction = idb.BenchmarkSpecPrediction(
-    name="BenchmarkRobotInverse_Prediction",
+BenchmarkRobotInverse_Simulation, BenchmarkRobotInverse_Prediction = make_sim_pred(
+    name_base="BenchmarkRobotInverse",
     dataset_id="robot_inverse",
     u_cols=u_inverse,
     y_cols=y_inverse,

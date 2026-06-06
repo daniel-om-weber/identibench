@@ -15,8 +15,8 @@ __all__ = [
 ]
 
 from nonlinear_benchmarks.utilities import get_tmp_benchmark_directory
-import identibench.benchmark as idb
 import identibench.metrics
+from ._common import make_sim_pred
 from pathlib import Path
 import os
 import h5py
@@ -31,7 +31,9 @@ from scipy.signal import butter, lfilter, lfilter_zi
 
 fnames_test = ["ovalz_10", "ovalz_4", "8z_5", "8z_6", "line8z_4", "wz_12", "v_8", "vT_5"]
 
-fnames_valid = ["oval_5", "linez_4", "8_5", "8_7", "w_12vz_7", "v_8"]
+fnames_valid = ["oval_5", "linez_4", "8_5", "8_7", "w_12vz_7"]
+
+assert set(fnames_test).isdisjoint(fnames_valid)
 
 
 def get_parent_dir(
@@ -46,7 +48,12 @@ def get_parent_dir(
 
 
 def parseBag(topic, path):
-    import bagpy
+    try:
+        import bagpy
+    except ImportError as e:
+        raise ImportError(
+            'bagpy is required for the QuadPi dataset. Install it with: pip install "identibench[quad]"'
+        ) from e
 
     bag = bagpy.bagreader(path, verbose=False)
     return pd.read_csv(bag.message_by_topic(topic))
@@ -325,7 +332,12 @@ def dl_quad_pi(
     if force_download and zip_target_path.is_file():
         os.remove(zip_target_path)  # Remove existing file to force re-download
 
-    import gdown
+    try:
+        import gdown
+    except ImportError as e:
+        raise ImportError(
+            'gdown is required for the QuadPi dataset. Install it with: pip install "identibench[quad]"'
+        ) from e
 
     gdown.cached_download(url, str(zip_target_path), postprocess=gdown.extractall, fuzzy=True)
 
@@ -351,17 +363,8 @@ quad_pi_y_wdot = ["wdot_x", "wdot_y", "wdot_z"]
 quad_pi_y = quad_pi_y_vdot + quad_pi_y_wdot
 
 
-BenchmarkQuadPi_Simulation = idb.BenchmarkSpecSimulation(
-    name="BenchmarkQuadPi_Simulation",
-    dataset_id="quad_pi",
-    u_cols=quad_pi_u,
-    y_cols=quad_pi_y,
-    metric_func=identibench.metrics.rmse,
-    download_func=dl_quad_pi,
-    init_window=100,
-)
-BenchmarkQuadPi_Prediction = idb.BenchmarkSpecPrediction(
-    name="BenchmarkQuadPi_Prediction",
+BenchmarkQuadPi_Simulation, BenchmarkQuadPi_Prediction = make_sim_pred(
+    name_base="BenchmarkQuadPi",
     dataset_id="quad_pi",
     u_cols=quad_pi_u,
     y_cols=quad_pi_y,

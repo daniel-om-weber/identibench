@@ -123,55 +123,15 @@ def fix_quaternion_flips(quat: np.ndarray, threshold: float = 1.0) -> np.ndarray
     return quat
 
 
-def interpolate_nans(arr: np.ndarray, limit: int | None = None) -> np.ndarray:
-    """Linear interpolation of NaN gaps, per column.
-
-    Args:
-        arr: 1-D or 2-D array with potential NaN values
-        limit: if set, NaN runs longer than *limit* are left as NaN
-    """
-    arr = arr.copy()
-    squeeze = arr.ndim == 1
-    if squeeze:
-        arr = arr[:, None]
-    for col in range(arr.shape[1]):
-        y = arr[:, col]
-        nans = np.isnan(y)
-        if not nans.any():
-            continue
-        valid = ~nans
-        if valid.sum() < 2:
-            continue
-        idx = np.arange(len(y))
-        y[nans] = np.interp(idx[nans], idx[valid], y[valid])
-        # Re-NaN runs that exceed the limit
-        if limit is not None:
-            nan_orig = nans.copy()
-            i = 0
-            while i < len(nan_orig):
-                if nan_orig[i]:
-                    j = i
-                    while j < len(nan_orig) and nan_orig[j]:
-                        j += 1
-                    if j - i > limit:
-                        arr[i:j, col] = np.nan
-                    i = j
-                else:
-                    i += 1
-    if squeeze:
-        arr = arr[:, 0]
-    return arr
-
-
 # ───────────────────────── benchmark spec factory ─────────────────────────
 
 
 def _spec(name: str, dataset_id: str, download_func) -> BenchmarkSpecSimulation:
     """Build the orientation benchmark spec shared by every source.
 
-    Headline ``metric_func`` is the first-sample-aligned inclination RMSE; the
-    faithful masked + 99th-percentile per-source numbers come from
-    :func:`riann_eval` via ``custom_test_evaluation``.
+    The headline ``metric_func`` is the first-sample-aligned (unmasked)
+    inclination RMSE; the faithful masked + 99th-percentile per-source numbers
+    come from :func:`riann_eval` via ``custom_test_evaluation``.
     """
     return BenchmarkSpecSimulation(
         name=name,
@@ -248,7 +208,12 @@ def riann_eval(test_results, spec) -> dict:
 
 
 def _test_role(source: str, fname: str) -> str:
-    """Role function for a standalone per-source dataset: every file is test."""
+    """Role function for a standalone per-source dataset: every file is test.
+
+    ``source``/``fname`` are unused here but kept to honor the ``role_fn(source,
+    fname)`` calling convention :func:`_prepare` shares with the per-source
+    splitter (e.g. ``riann._riann_role``).
+    """
     return "test"
 
 

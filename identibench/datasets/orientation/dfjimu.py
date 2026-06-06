@@ -18,8 +18,8 @@ import numpy as np
 import requests
 import scipy.io
 
-import identibench.benchmark as idb
-from identibench.metrics import inclination_rmse_deg, orientation_rmse_deg, _quat_conj, _quat_mul
+from identibench.benchmark import BenchmarkSpecSimulation
+from identibench.metrics import _quat_conj, _quat_mul, inclination_rmse_deg, orientation_rmse_deg
 from identibench.utils import write_dataset
 
 ALL_FILES = [
@@ -185,7 +185,7 @@ def dl_dfjimu(
 
 # --- Benchmark specifications ---
 
-BenchmarkDFJIMU_Inclination = idb.BenchmarkSpecSimulation(
+BenchmarkDFJIMU_Inclination = BenchmarkSpecSimulation(
     name="BenchmarkDFJIMU_Inclination",
     dataset_id="dfjimu",
     u_cols=dfjimu_u_generic,
@@ -197,7 +197,7 @@ BenchmarkDFJIMU_Inclination = idb.BenchmarkSpecSimulation(
     split=dfjimu_split_all_test_persensor,
 )
 
-BenchmarkDFJIMU_Relative = idb.BenchmarkSpecSimulation(
+BenchmarkDFJIMU_Relative = BenchmarkSpecSimulation(
     name="BenchmarkDFJIMU_Relative",
     dataset_id="dfjimu",
     u_cols=dfjimu_u_cols,

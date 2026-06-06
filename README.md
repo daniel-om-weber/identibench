@@ -68,37 +68,73 @@ cd identibench
 uv sync --extra dev
 ```
 
-```python
-# Basic usage
-import identibench as idb
-from pathlib import Path
+## Quickstart
 
-# Example: Download a single dataset
-# Note: Always use a Path object, not a string
-save_path = Path('./tmp/wh')
-idb.datasets.workshop.dl_wiener_hammerstein(save_path)
+A model is a `build_model(context)` function that trains on the benchmark's
+training data and returns a *predictor* callable. For a simulation benchmark the
+predictor is called as `model(u, y_init, attrs)` and returns the simulated
+output. That's the whole interface — IdentiBench handles downloading the data,
+running your predictor over every test sequence, and scoring it.
+
+```python
+import numpy as np
+import identibench as idb
+
+def build_model(context):
+    # Train on the benchmark's training split. This trivial baseline just
+    # predicts the mean of the training output — replace it with your own model.
+    y_train = np.concatenate([seq.y for seq in context.get_train_sequences()])
+    y_mean = y_train.mean(axis=0)
+
+    def model(u, y_init, attrs):
+        # Called once per test sequence; returns an array of shape (len(u), n_y).
+        return np.tile(y_mean, (len(u), 1))
+
+    return model
+
+# The first call downloads and caches the dataset under ~/.identibench_data
+# (override with the IDENTIBENCH_DATA_ROOT environment variable). WH is small
+# (a few MB), so it's a good first benchmark.
+result = idb.run_benchmark(idb.BenchmarkWH_Simulation, build_model)
+print(result["metric_score"])   # primary metric (RMSE in mV) on the test set
 ```
+
+For complete, runnable models see the [`examples/`](examples/) notebooks:
+[`00_getting_started`](examples/00_getting_started.py) fits a linear ARX baseline
+on a simulation benchmark, and
+[`01_riann_orientation`](examples/01_riann_orientation.py) scores an orientation
+model on the IMU benchmarks.
+
+> **Datasets download on first use** and are cached locally, so you only pay for
+> them once. The classic simulation/prediction benchmarks are small (a few MB
+> each); the orientation/IMU and quadrotor datasets are larger (hundreds of MB —
+> e.g. BROAD is ~0.8 GB), so start with a small benchmark such as `WH_Sim`.
+
+### Training a model with hyperparameters
+
+`build_model` receives the full `context`, so you can fit any model and read
+settings from `context.hyperparameters`. This example trains a NARX model with
+[`sysidentpy`](https://sysidentpy.org) (install it first: `pip install sysidentpy`):
 
 ```python
 from sysidentpy.model_structure_selection import FROLS
 from sysidentpy.parameter_estimation import LeastSquares
+
 def build_frols_model(context):
     u_train, y_train, _ = next(context.get_train_sequences())
-    
+
     ylag = context.hyperparameters.get('ylag', 5)
     xlag = context.hyperparameters.get('xlag', 5)
     n_terms = context.hyperparameters.get('n_terms', 10)
     estimator = context.hyperparameters.get('estimator', LeastSquares())
 
-    _model = FROLS(xlag=xlag, ylag=ylag, n_terms=n_terms,estimator=estimator)
+    _model = FROLS(xlag=xlag, ylag=ylag, n_terms=n_terms, estimator=estimator)
     _model.fit(X=u_train, y=y_train)
 
-    def model(u_test, y_init):
-        nonlocal _model
+    def model(u_test, y_init, attrs):
         yhat_full = _model.predict(X=u_test, y=y_init[:_model.max_lag])
-        y_pred = yhat_full[_model.max_lag:]
-        return y_pred
-    
+        return yhat_full[_model.max_lag:]
+
     return model
 ```
 
@@ -106,14 +142,14 @@ def build_frols_model(context):
 hyperparams = {
     'ylag': 2,
     'xlag': 2,
-    'n_terms': 10, # Number of terms for FROLS
-    'estimator': LeastSquares()
+    'n_terms': 10,            # number of terms for FROLS
+    'estimator': LeastSquares(),
 }
 
 results = idb.run_benchmark(
     spec=idb.BenchmarkWH_Simulation,
     build_model=build_frols_model,
-    hyperparameters=hyperparams
+    hyperparameters=hyperparams,
 )
 ```
 
@@ -267,21 +303,28 @@ you provide to `run_benchmark`.
   - `context.seed`: A random seed for ensuring reproducibility.
   - Data Access Methods: Functions like `context.get_train_sequences()`
     and `context.get_valid_sequences()` provide iterators over the raw,
-    full-length training and validation data sequences (as tuples of
-    NumPy arrays `(u, y, x)`). **Note:** You need to handle any batching
-    or windowing required for your specific training algorithm *within*
-    your `build_model` function.
+    full-length data sequences as `Sequence(u, y, attrs)` named tuples,
+    where `u` and `y` are NumPy arrays and `attrs` is a dict of that
+    file's HDF5 attributes (e.g. the sampling rate `fs`). **Note:** You
+    need to handle any batching or windowing required for your specific
+    training algorithm *within* your `build_model` function.
 - **Output (Predictor `Callable`):** `build_model` *must* return a
-  callable object (e.g., a function, an object’s method) that represents
-  your trained model ready for prediction/simulation. This returned
-  callable will be used internally by `run_benchmark` on the test set. Its expected signature depends on the benchmark type,
-  but typically it accepts NumPy arrays for test inputs (and potentially
-  initial outputs) and returns a NumPy array containing the predictions.
+  callable with the signature `model(u, y_init, attrs)` that returns the
+  predicted output as a NumPy array of shape `(len(u), len(y_cols))`:
+  - `u`: the input sequence to predict over — the full test signal for a
+    simulation benchmark, or a single window for a prediction benchmark.
+  - `y_init`: the first `init_window` ground-truth output samples, provided
+    for warm-up / state initialization.
+  - `attrs`: a dict of the test file's HDF5 attributes (e.g. the sampling
+    rate `fs`).
+
+  `run_benchmark` calls this predictor on each test sequence and scores the
+  returned predictions against the held-out targets.
 
 ### Running Multiple Benchmarks
 
 To evaluate a model across several scenarios efficiently, use the
-`run_multiple_benchmarks` function:
+`run_benchmarks` function:
 
 ```python
 # Example: Run on a subset of benchmarks

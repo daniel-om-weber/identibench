@@ -10,11 +10,11 @@ ETH Research Collection.
 
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from ._common import _prepare, _spec, _test_role, download_file, extract_archive, fix_quaternion_flips, write_hdf5
 
+_RAW_DIR = "euroc"  # cache sub-directory under raw_dir for downloads + extraction
 SOURCE_DIR = "EuRoC-MAV"  # sub-directory convert() writes into / routing key
 
 SEQUENCES = [
@@ -33,7 +33,7 @@ _BUNDLES = {
 
 
 def download(raw_dir: Path, force: bool = False) -> None:
-    raw_dir = raw_dir / "euroc"
+    raw_dir = raw_dir / _RAW_DIR
     for room, url in _BUNDLES.items():
         dest = raw_dir / f"{room}.zip"
         download_file(url, dest, force=force)
@@ -76,8 +76,8 @@ def _ensure_extracted(raw_dir: Path, force: bool = False) -> None:
 
 
 def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
-    raw_dir = raw_dir / "euroc"
-    out_dir = out_dir / "EuRoC-MAV"
+    raw_dir = raw_dir / _RAW_DIR
+    out_dir = out_dir / SOURCE_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
 
     _ensure_extracted(raw_dir, force=force)

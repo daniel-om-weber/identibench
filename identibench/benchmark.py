@@ -22,11 +22,28 @@ from .utils import get_default_data_root, _load_sequences_from_files, hdf_files_
 
 
 def aggregate_metric_score(
-    test_results, metric_func, score_name=None, sequence_aggregation_func=np.mean, window_aggregation_func=np.mean
-):
-    # iterate over test_results and calculate metric score for each (y_pred, y_true) tuple, if prediction, iterate over nested tuples with nested loop
+    test_results: list,  # `(y_pred, y_true)` tuples (simulation) or nested lists thereof (prediction).
+    metric_func: Callable[[np.ndarray, np.ndarray], float],  # Metric called as `func(y_pred, y_true)`.
+    score_name: str | None = None,  # Key for the returned dict; defaults to `metric_func.__name__`.
+    sequence_aggregation_func: Callable[..., float] = np.mean,  # Reduces per-sequence scores to a scalar.
+    window_aggregation_func: Callable[..., float] = np.mean,  # Reduces per-window scores within a sequence.
+) -> dict[str, float]:
+    """Computes a single aggregated score from per-sequence test results.
+
+    The metric is applied to each `(y_pred, y_true)` pair as `metric_func(y_pred, y_true)`
+    (matching how the metrics in `metrics.py` are defined, `func(inp=pred, targ=true)`).
+    Multi-channel metric outputs and the per-window/per-sequence axes are reduced to a
+    single scalar (mean by default), so the returned score is averaged across both
+    channels and sequences.
+
+    Returns:
+        A dict mapping `score_name` to the aggregated scalar score. For empty
+        `test_results` the score is `np.nan`.
+    """
     if score_name is None:
         score_name = metric_func.__name__
+    if not test_results:
+        return {score_name: np.nan}
     if isinstance(test_results[0], list):
         scores = []
         for windowed_sequence in test_results:
@@ -36,10 +53,6 @@ def aggregate_metric_score(
     else:
         scores = [[metric_func(y_pred, y_test) for y_pred, y_test in test_results]]
     return {score_name: sequence_aggregation_func(scores)}
-
-
-class BenchmarkSpecBase:
-    pass
 
 
 class BenchmarkSpecBase:
@@ -53,16 +66,14 @@ class BenchmarkSpecBase:
         dataset_id: str,  # Identifier for the raw dataset source.
         u_cols: list[str],  # list of column names for input signals (u).
         y_cols: list[str],  # list of column names for output signals (y).
-        metric_func: Callable[[np.ndarray, np.ndarray], float],  # Primary metric: `func(y_true, y_pred)`.
+        metric_func: Callable[[np.ndarray, np.ndarray], float],  # Primary metric: `func(y_pred, y_true)`.
         sampling_time: float | None = None,  # Optional sampling time (seconds).
         download_func: Callable[[Path, bool], None] | None = None,  # Dataset preparation func.
-        test_model_func: Callable[[BenchmarkSpecBase, Callable], dict[str, Any]] = None,
-        custom_test_evaluation=None,
+        test_model_func: Callable[["BenchmarkSpecBase", Callable], list] | None = None,  # Test-loop runner.
+        custom_test_evaluation: Callable[[list, "BenchmarkSpecBase"], dict[str, Any]]
+        | None = None,  # Optional extra scoring.
         init_window: int | None = None,  # Steps for warm-up, potentially ignored in evaluation.
-        data_root: [
-            Path,
-            Callable[[], Path],
-        ] = get_default_data_root,  # root dir for dataset, may be a callable or path
+        data_root: Path | Callable[[], Path] = get_default_data_root,  # Root dir for dataset; path or callable.
         split: dict[str, list[str]] | None = None,  # Optional split mapping filenames to train/valid/test.
     ):
         self.name = name
@@ -175,7 +186,11 @@ class BenchmarkSpecBase:
             print(f"Dataset '{self.name}' prepared successfully.")
 
 
-def _test_simulation(specs, model):
+def _test_simulation(
+    specs: BenchmarkSpecBase,  # Benchmark spec providing the test files and columns.
+    model: Callable,  # Trained model `model(u, y_init, attrs) -> np.ndarray`.
+) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Runs the model over each test sequence, returning `(y_pred, y_true)` pairs."""
     results = []
     for seq in _load_sequences_from_files(specs.test_files, specs.u_cols, specs.y_cols):
         model_seq = Sequence(seq.u, seq.y[: specs.init_window], seq.attrs)
@@ -200,33 +215,37 @@ class BenchmarkSpecSimulation(BenchmarkSpecBase):
         dataset_id: str,  # Identifier for the raw dataset source.
         u_cols: list[str],  # list of column names for input signals (u).
         y_cols: list[str],  # list of column names for output signals (y).
-        metric_func: Callable[[np.ndarray, np.ndarray], float],  # Primary metric: `func(y_true, y_pred)`.
+        metric_func: Callable[[np.ndarray, np.ndarray], float],  # Primary metric: `func(y_pred, y_true)`.
         sampling_time: float | None = None,  # Optional sampling time (seconds).
         download_func: Callable[[Path, bool], None] | None = None,  # Dataset preparation func.
-        test_model_func: Callable[[BenchmarkSpecBase, Callable], dict[str, Any]] = _test_simulation,
-        custom_test_evaluation=None,
+        test_model_func: Callable[["BenchmarkSpecBase", Callable], list] = _test_simulation,  # Test-loop runner.
+        custom_test_evaluation: Callable[[list, "BenchmarkSpecBase"], dict[str, Any]]
+        | None = None,  # Optional extra scoring.
         init_window: int | None = None,  # Steps for warm-up, potentially ignored in evaluation.
-        data_root: [
-            Path,
-            Callable[[], Path],
-        ] = get_default_data_root,  # root dir for dataset, may be a callable or path
+        data_root: Path | Callable[[], Path] = get_default_data_root,  # Root dir for dataset; path or callable.
         split: dict[str, list[str]] | None = None,  # Optional split mapping filenames to train/valid/test.
     ):
-        self.name = name
-        self.dataset_id = dataset_id
-        self.u_cols = u_cols
-        self.y_cols = y_cols
-        self.metric_func = metric_func
-        self.sampling_time = sampling_time
-        self.download_func = download_func
-        self.test_model_func = test_model_func
-        self.custom_test_evaluation = custom_test_evaluation
-        self.init_window = init_window
-        self._data_root = data_root
-        self.split = split
+        super().__init__(
+            name=name,
+            dataset_id=dataset_id,
+            u_cols=u_cols,
+            y_cols=y_cols,
+            metric_func=metric_func,
+            sampling_time=sampling_time,
+            download_func=download_func,
+            test_model_func=test_model_func,
+            custom_test_evaluation=custom_test_evaluation,
+            init_window=init_window,
+            data_root=data_root,
+            split=split,
+        )
 
 
-def _test_prediction(specs, model):
+def _test_prediction(
+    specs: "BenchmarkSpecPrediction",  # Prediction spec providing windowing parameters and test files.
+    model: Callable,  # Trained model `model(u, y_init, attrs) -> np.ndarray`.
+) -> list[list[tuple[np.ndarray, np.ndarray]]]:
+    """Runs the model over sliding windows of each test sequence, returning nested `(y_pred, y_true)` pairs."""
     results = []
     for seq in _load_sequences_from_files(specs.test_files, specs.u_cols, specs.y_cols):
         # iterate through windows of u_test and y_test
@@ -255,46 +274,52 @@ class BenchmarkSpecPrediction(BenchmarkSpecBase):
         dataset_id: str,  # Identifier for the raw dataset source.
         u_cols: list[str],  # list of column names for input signals (u).
         y_cols: list[str],  # list of column names for output signals (y).
-        metric_func: Callable[[np.ndarray, np.ndarray], float],  # Primary metric: `func(y_true, y_pred)`.
+        metric_func: Callable[[np.ndarray, np.ndarray], float],  # Primary metric: `func(y_pred, y_true)`.
         pred_horizon: int,  # The 'k' in k-step ahead prediction (mandatory for this type).
         pred_step: int,  # Step size for k-step ahead prediction (e.g., predict y[t+k] using data up to t).
         sampling_time: float | None = None,  # Optional sampling time (seconds).
         download_func: Callable[[Path, bool], None] | None = None,  # Dataset preparation func.
-        test_model_func: Callable[[BenchmarkSpecBase, Callable], dict[str, Any]] = _test_prediction,
-        custom_test_evaluation=None,
+        test_model_func: Callable[["BenchmarkSpecBase", Callable], list] = _test_prediction,  # Test-loop runner.
+        custom_test_evaluation: Callable[[list, "BenchmarkSpecBase"], dict[str, Any]]
+        | None = None,  # Optional extra scoring.
         init_window: int | None = None,  # Steps for warm-up, potentially ignored in evaluation.
-        data_root: [
-            Path,
-            Callable[[], Path],
-        ] = get_default_data_root,  # root dir for dataset, may be a callable or path
+        data_root: Path | Callable[[], Path] = get_default_data_root,  # Root dir for dataset; path or callable.
         split: dict[str, list[str]] | None = None,  # Optional split mapping filenames to train/valid/test.
     ):
         if pred_horizon <= 0:
             raise ValueError("pred_horizon must be a positive integer for PredictionBenchmarkSpec.")
+        super().__init__(
+            name=name,
+            dataset_id=dataset_id,
+            u_cols=u_cols,
+            y_cols=y_cols,
+            metric_func=metric_func,
+            sampling_time=sampling_time,
+            download_func=download_func,
+            test_model_func=test_model_func,
+            custom_test_evaluation=custom_test_evaluation,
+            init_window=init_window,
+            data_root=data_root,
+            split=split,
+        )
         self.pred_horizon = pred_horizon
         self.pred_step = pred_step
-
-        self.name = name
-        self.dataset_id = dataset_id
-        self.u_cols = u_cols
-        self.y_cols = y_cols
-        self.metric_func = metric_func
-        self.sampling_time = sampling_time
-        self.download_func = download_func
-        self.test_model_func = test_model_func
-        self.custom_test_evaluation = custom_test_evaluation
-        self.init_window = init_window
-        self._data_root = data_root
-        self.split = split
 
 
 class TrainingContext:
     """
-    Context object passed to the user's training function (`build_predictor`).
+    Context object passed to the user's training function (`build_model`).
 
     Holds the benchmark specification, hyperparameters, and seed.
     Provides methods to access the raw, full-length training and validation data sequences.
-    Windowing/batching for training must be handled within the user's `build_predictor` function.
+    Windowing/batching for training must be handled within the user's `build_model` function.
+
+    Model contract:
+        `build_model(context)` must return a callable `model(u, y_init, attrs) -> np.ndarray`.
+        Given the input signal `u` (shape `(T, len(spec.u_cols))`), an initial-condition
+        slice of the output `y_init`, and the sequence's `attrs` dict, the model must return
+        predictions of shape `(len(u), len(spec.y_cols))`. The evaluation loop aligns the
+        prediction tail with the target, so returning predictions for the full `u` is expected.
     """
 
     def __init__(
@@ -342,7 +367,41 @@ class TrainingContext:
         )
 
 
-def run_benchmark(spec, build_model, hyperparameters={}, seed=None):
+def run_benchmark(
+    spec: BenchmarkSpecBase,  # The benchmark specification to run.
+    build_model: Callable[[TrainingContext], Callable],  # Builds the trained model from a TrainingContext.
+    hyperparameters: dict[str, Any] | None = None,  # Model/training hyperparameters; defaults to empty.
+    seed: int | None = None,  # Random seed; a random one is drawn when None.
+) -> dict[str, Any]:
+    """Trains and evaluates a single model against one benchmark specification.
+
+    `build_model(context)` receives a `TrainingContext` and must return a callable
+    `model(u, y_init, attrs) -> np.ndarray` producing predictions of shape
+    `(len(u), len(spec.y_cols))` (see `TrainingContext` for the full model contract).
+
+    Args:
+        spec: The benchmark specification to run.
+        build_model: User function that builds the trained model from a `TrainingContext`.
+        hyperparameters: Model/training hyperparameters passed through the context.
+            Defaults to an empty dict when None.
+        seed: Random seed for reproducibility; a random seed is drawn when None.
+
+    Returns:
+        A result dict with the following keys:
+            - `benchmark_name` (str): `spec.name`.
+            - `dataset_id` (str): `spec.dataset_id`.
+            - `hyperparameters` (dict): The hyperparameters used.
+            - `seed` (int): The seed used.
+            - `training_time_seconds` (float): Wall-clock time spent in `build_model`.
+            - `test_time_seconds` (float): Wall-clock time spent running the test loop.
+            - `benchmark_type` (str): The spec's class name.
+            - `metric_name` (str): Name of `spec.metric_func`.
+            - `metric_score` (float): The primary metric aggregated (mean) across channels
+              and sequences.
+            - `custom_scores` (dict): Output of `spec.custom_test_evaluation`, if any.
+            - `model_predictions` (list): Raw `(y_pred, y_true)` test results.
+    """
+    hyperparameters = hyperparameters or {}
 
     if seed is None:
         seed = random.randint(0, 2**32 - 1)

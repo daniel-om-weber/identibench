@@ -8,18 +8,19 @@ __all__ = [
     "write_array",
     "iodata_to_hdf5",
     "dataset_to_hdf5",
-    "unzip_download",
-    "unrar_download",
     "download",
 ]
 
-from nonlinear_benchmarks import *
+import os
+import warnings
 from collections.abc import Iterator
 from pathlib import Path
-from typing import NamedTuple, Any
-import numpy as np
+from typing import Any, NamedTuple
+
 import h5py
-import os
+import numpy as np
+import requests
+from nonlinear_benchmarks import Input_output_data
 
 
 class Sequence(NamedTuple):
@@ -69,10 +70,18 @@ def _dummy_dataset_loader(
                     f.create_dataset("y0", data=np.random.rand(seq_len).astype(np.float32))
                     f.attrs["fs"] = 10.0
             except Exception as e:
-                print(f"Failed to create dummy file {dummy_file_path}: {e}")
+                warnings.warn(f"Failed to create dummy file {dummy_file_path}: {e}", RuntimeWarning)
 
 
 def hdf_files_from_path(fpath: Path) -> list[Path]:
+    """Lists the HDF5 files in a directory, sorted by name.
+
+    Args:
+        fpath: Directory to search for ``*.hdf5`` files.
+
+    Returns:
+        Sorted list of paths to the HDF5 files found in ``fpath``.
+    """
     return sorted(list(fpath.glob("*.hdf5")))
 
 
@@ -97,7 +106,7 @@ def _load_sequences_from_files(
                 y_data = np.stack([f[col][()] for col in y_cols], axis=-1).astype(np.float32)
                 attrs = dict(f.attrs)
         except Exception as e:
-            print(f"Warning: Error reading {file_path}: {e}")
+            warnings.warn(f"Error reading {file_path}: {e}", RuntimeWarning)
             continue
 
         if win_sz is None:
@@ -138,8 +147,23 @@ def write_array(
 def iodata_to_hdf5(
     iodata: Input_output_data,  # data to save to file
     hdf_dir: Path,  # Export directory for hdf5 files
-    f_name: str = None,  # name of hdf5 file without '.hdf5' ending
+    f_name: str | None = None,  # name of hdf5 file without '.hdf5' ending; defaults to iodata.name
 ) -> Path:
+    """Writes a single Input_output_data record to an HDF5 file.
+
+    The input and output channels are stored as row-wise datasets (``u0``,
+    ``u1``, ... and ``y0``, ``y1``, ...). Sampling rate and state
+    initialization window length, when available, are stored as file attributes.
+
+    Args:
+        iodata: Input/output data record to save.
+        hdf_dir: Export directory for the HDF5 file; created if it does not exist.
+        f_name: Name of the HDF5 file without the ``.hdf5`` ending. Defaults to
+            ``iodata.name`` when ``None``.
+
+    Returns:
+        Path to the written HDF5 file.
+    """
     data_2d = iodata.atleast_2d()
     u, y = data_2d.u, data_2d.y
 
@@ -166,9 +190,26 @@ def dataset_to_hdf5(
     valid: tuple,  # tuple of Input_output_data for validation
     test: tuple,  # tuple of Input_output_data for test
     save_path: Path,  # directory the files are written to, created if it does not exist
-    train_valid: tuple = None,  # optional tuple of unsplit Input_output_data for training and validation
+    train_valid: tuple | None = None,  # optional tuple of unsplit Input_output_data for training and validation
 ) -> None:
-    "Save a dataset consisting of training, validation, and test set in hdf5 format in seperate subdirectories"
+    """Saves a dataset as HDF5 files in separate subdirectories per subset.
+
+    Each subset is written to its own subdirectory (``train``, ``valid``,
+    ``test`` and, when provided, ``train_valid``) of ``save_path``, with one
+    HDF5 file per record. A single ``Input_output_data`` is accepted in place of
+    a tuple for any subset.
+
+    Args:
+        train: Tuple of ``Input_output_data`` for training.
+        valid: Tuple of ``Input_output_data`` for validation.
+        test: Tuple of ``Input_output_data`` for testing.
+        save_path: Directory the files are written to; created if it does not exist.
+        train_valid: Optional tuple of unsplit ``Input_output_data`` for
+            combined training and validation.
+
+    Raises:
+        ValueError: If a subset is not an ``Input_output_data`` or a tuple thereof.
+    """
     save_path = Path(save_path)
 
     dict_data = {"train": train, "valid": valid, "test": test, "train_valid": train_valid}
@@ -192,41 +233,24 @@ def dataset_to_hdf5(
             iodata_to_hdf5(iodata, save_path / subset, f"{subset}_{idx}")
 
 
-import requests
-import io
-import zipfile
-import rarfile
-
-
-def unzip_download(
-    url: str,  # url to file to download
-    extract_dir: Path = Path("."),  # directory the archive is extracted to
-) -> None:
-    "downloads a zip archive to ram and extracts it"
-    response = requests.get(url)
-    with zipfile.ZipFile(io.BytesIO(response.content)) as zip_ref:
-        zip_ref.extractall(extract_dir)
-
-
-def unrar_download(
-    url: str,  # url to file to download
-    extract_dir: Path = Path("."),  # directory the archive is extracted to
-) -> None:
-    "downloads a rar archive to ram and extracts it"
-    response = requests.get(url)
-    with rarfile.RarFile(io.BytesIO(response.content)) as zip_ref:
-        zip_ref.extractall(extract_dir)
-
-
 def download(
     url: str,  # url to file to download
-    target_dir: Path = Path("."),
+    target_dir: Path = Path("."),  # directory the file is downloaded to
 ) -> Path:
-    fname = Path(url).name
-    if os.path.isfile(fname):
-        return
+    """Downloads a file to a target directory, skipping it if already present.
+
+    Args:
+        url: URL of the file to download. The basename of the URL is used as the
+            local file name.
+        target_dir: Directory the file is downloaded to.
+
+    Returns:
+        Path to the downloaded (or pre-existing) file.
+    """
+    p_name = Path(target_dir) / Path(url).name
+    if p_name.is_file():
+        return p_name
     response = requests.get(url)
-    p_name = Path(target_dir).joinpath(fname)
     with open(p_name, "wb") as file:
         file.write(response.content)
     return p_name

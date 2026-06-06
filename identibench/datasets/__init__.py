@@ -16,7 +16,7 @@ from .orientation import (
 )
 
 all_dataset_loaders = {
-    "wiener_hammerstein": dl_wiener_hammerstein,
+    "wh": dl_wiener_hammerstein,
     "silverbox": dl_silverbox,
     "cascaded_tanks": dl_cascaded_tanks,
     "emps": dl_emps,

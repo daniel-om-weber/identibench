@@ -1,6 +1,5 @@
 """Tests for dataset download pipeline, HDF5 writing utilities, and ensure_dataset_exists."""
 
-import multiprocessing
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 

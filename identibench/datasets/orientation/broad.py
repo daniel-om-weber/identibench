@@ -21,6 +21,7 @@ from scipy.io import loadmat
 from ._common import _prepare, _spec, _test_role, download_file, extract_archive, fix_quaternion_flips, write_hdf5
 
 _REPO_ZIP = "https://github.com/dlaidig/broad/archive/refs/heads/main.zip"
+_RAW_DIR = "broad"  # cache sub-directory under raw_dir for downloads + extraction
 SOURCE_DIR = "Myon"  # sub-directory convert() writes into / routing key
 
 # Known Myon output filenames keyed by trial number (01-39).
@@ -68,13 +69,13 @@ MYON_NAMES = {
 
 
 def download(raw_dir: Path, force: bool = False) -> None:
-    raw_dir = raw_dir / "broad"
+    raw_dir = raw_dir / _RAW_DIR
     download_file(_REPO_ZIP, raw_dir / "broad-main.zip", force=force)
 
 
 def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
-    raw_dir = raw_dir / "broad"
-    out_dir = out_dir / "Myon"
+    raw_dir = raw_dir / _RAW_DIR
+    out_dir = out_dir / SOURCE_DIR
     out_dir.mkdir(parents=True, exist_ok=True)
 
     zip_path = raw_dir / "broad-main.zip"

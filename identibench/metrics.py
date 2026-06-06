@@ -36,11 +36,7 @@ def rmse(
         raise ValueError(f"Invalid time_axis {time_axis} for array with {inp.ndim} dimensions")
 
     # Calculate RMSE
-    try:
-        rmse_val = np.sqrt(np.mean((inp - targ) ** 2, axis=time_axis))
-    except FloatingPointError as e:
-        warnings.warn(f"Floating point error during RMSE calculation: {e}. Check for NaNs or Infs.", RuntimeWarning)
-        raise e
+    rmse_val = np.sqrt(np.mean((inp - targ) ** 2, axis=time_axis))
     return rmse_val
 
 
@@ -120,11 +116,7 @@ def mae(
         raise ValueError(f"Invalid time_axis {time_axis} for array with {inp.ndim} dimensions")
 
     # Calculate MAE
-    try:
-        mae_val = np.mean(np.abs(inp - targ), axis=time_axis)
-    except FloatingPointError as e:
-        warnings.warn(f"Floating point error during MAE calculation: {e}. Check for NaNs or Infs.", RuntimeWarning)
-        raise e
+    mae_val = np.mean(np.abs(inp - targ), axis=time_axis)
     return mae_val
 
 

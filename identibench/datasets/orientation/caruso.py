@@ -29,6 +29,7 @@ from scipy.io import loadmat
 from ._common import _prepare, _spec, _test_role, download_file, fix_quaternion_flips, write_hdf5
 
 _RELEASE = "https://github.com/marcocaruso/mimu_optical_dataset_caruso_sassari/releases/download/v5.0"
+_RAW_DIR = "caruso"  # cache sub-directory under raw_dir for downloads
 # convert() also writes Caruso-Sassari_orig; only this dir is routed/kept.
 SOURCE_DIR = "Caruso-Sassari"
 _SPEEDS = ["slow", "medium", "fast"]
@@ -37,15 +38,15 @@ _INDEX_KEYS = ["indarb", "indx", "indy", "indz"]
 
 
 def download(raw_dir: Path, force: bool = False) -> None:
-    raw_dir = raw_dir / "caruso"
+    raw_dir = raw_dir / _RAW_DIR
     for speed in _SPEEDS:
         url = f"{_RELEASE}/{speed}_v5.mat"
         download_file(url, raw_dir / f"{speed}_v5.mat", force=force)
 
 
 def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
-    raw_dir = raw_dir / "caruso"
-    dir_main = out_dir / "Caruso-Sassari"
+    raw_dir = raw_dir / _RAW_DIR
+    dir_main = out_dir / SOURCE_DIR
     dir_orig = out_dir / "Caruso-Sassari_orig"
     dir_main.mkdir(parents=True, exist_ok=True)
     dir_orig.mkdir(parents=True, exist_ok=True)

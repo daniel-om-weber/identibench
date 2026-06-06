@@ -1,4 +1,4 @@
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 from .benchmark import (
     run_benchmark,
@@ -55,7 +55,6 @@ from .datasets.orientation import (
     BenchmarkEuRoC_Inclination,
     BenchmarkRepoIMU_Inclination,
     BenchmarkCaruso_Inclination,
-    riann_benchmarks,
     orientation_benchmarks,
 )
 
@@ -98,9 +97,58 @@ prediction_benchmarks = {
 
 all_benchmarks = {**simulation_benchmarks, **prediction_benchmarks}
 
-workshop_benchmarks = {
-    "WH_Sim": BenchmarkWH_Simulation,
-    "Silverbox_Sim": BenchmarkSilverbox_Simulation,
-    "EMPS_Sim": BenchmarkEMPS_Simulation,
-    "CED_Sim": BenchmarkCED_Simulation,
-}
+__all__ = [
+    # Core API
+    "run_benchmark",
+    "run_benchmarks",
+    "BenchmarkSpecSimulation",
+    "BenchmarkSpecPrediction",
+    "TrainingContext",
+    "benchmark_results_to_dataframe",
+    "aggregate_benchmark_results",
+    "Sequence",
+    # Subpackages / submodules
+    "metrics",
+    "datasets",
+    # Benchmark registries
+    "simulation_benchmarks",
+    "prediction_benchmarks",
+    "all_benchmarks",
+    "orientation_benchmarks",
+    # Workshop benchmark specs
+    "BenchmarkWH_Simulation",
+    "BenchmarkWH_Prediction",
+    "BenchmarkSilverbox_Simulation",
+    "BenchmarkSilverbox_Prediction",
+    "BenchmarkCascadedTanks_Simulation",
+    "BenchmarkCascadedTanks_Prediction",
+    "BenchmarkEMPS_Simulation",
+    "BenchmarkEMPS_Prediction",
+    "BenchmarkNoisyWH_Simulation",
+    "BenchmarkNoisyWH_Prediction",
+    "BenchmarkCED_Simulation",
+    "BenchmarkCED_Prediction",
+    # Robot benchmark specs
+    "BenchmarkRobotForward_Simulation",
+    "BenchmarkRobotForward_Prediction",
+    "BenchmarkRobotInverse_Simulation",
+    "BenchmarkRobotInverse_Prediction",
+    # Ship benchmark specs
+    "BenchmarkShip_Simulation",
+    "BenchmarkShip_Prediction",
+    # Quadrotor benchmark specs
+    "BenchmarkQuadPelican_Simulation",
+    "BenchmarkQuadPelican_Prediction",
+    "BenchmarkQuadPi_Simulation",
+    "BenchmarkQuadPi_Prediction",
+    # Orientation (IMU) benchmark specs
+    "BenchmarkDFJIMU_Inclination",
+    "BenchmarkDFJIMU_Relative",
+    "BenchmarkRIANN_Inclination",
+    "BenchmarkBROAD_Inclination",
+    "BenchmarkTUMVI_Inclination",
+    "BenchmarkOxIOD_Inclination",
+    "BenchmarkEuRoC_Inclination",
+    "BenchmarkRepoIMU_Inclination",
+    "BenchmarkCaruso_Inclination",
+]

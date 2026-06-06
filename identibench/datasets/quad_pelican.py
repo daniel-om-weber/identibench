@@ -16,8 +16,8 @@ __all__ = [
 ]
 
 from nonlinear_benchmarks.utilities import cashed_download
-import identibench.benchmark as idb
 import identibench.metrics
+from ._common import make_sim_pred
 from pathlib import Path
 import os
 import h5py
@@ -99,7 +99,7 @@ def get_parent_dir(
     elif f_name in pelican_fnames_test:
         return "test"
     else:
-        return ValueError(f"Filename {f_name} not recognized!")
+        raise ValueError(f"Filename {f_name} not recognized!")
 
 
 def dl_quad_pelican(
@@ -159,17 +159,8 @@ pelican_u = pelican_u_motors
 pelican_y = pelican_y_euler_rates + pelican_y_vel
 
 
-BenchmarkQuadPelican_Simulation = idb.BenchmarkSpecSimulation(
-    name="BenchmarkQuadPelican_Simulation",
-    dataset_id="quad_pelican",
-    u_cols=pelican_u,
-    y_cols=pelican_y,
-    metric_func=identibench.metrics.rmse,
-    download_func=dl_quad_pelican,
-    init_window=100,
-)
-BenchmarkQuadPelican_Prediction = idb.BenchmarkSpecPrediction(
-    name="BenchmarkQuadPelican_Prediction",
+BenchmarkQuadPelican_Simulation, BenchmarkQuadPelican_Prediction = make_sim_pred(
+    name_base="BenchmarkQuadPelican",
     dataset_id="quad_pelican",
     u_cols=pelican_u,
     y_cols=pelican_y,
