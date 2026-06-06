@@ -125,7 +125,8 @@ def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
         merged = pd.merge_asof(
             gt[gt_cols + bias_cols],
             imu[["ts"] + imu_cols],
-            on="ts", direction="nearest",
+            on="ts",
+            direction="nearest",
         )
 
         acc = merged[["a_RS_S_x [m s^-2]", "a_RS_S_y [m s^-2]", "a_RS_S_z [m s^-2]"]].values

@@ -106,14 +106,20 @@ def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
         # ── Load IMU data ──
         imu_path = ext_dir / "dso" / "imu.txt"
         imu = pd.read_csv(
-            imu_path, sep=" ", comment="#", header=None,
+            imu_path,
+            sep=" ",
+            comment="#",
+            header=None,
             names=["ts", "gyr_x", "gyr_y", "gyr_z", "acc_x", "acc_y", "acc_z"],
         )
 
         # ── Load ground truth ──
         gt_path = ext_dir / "dso" / "gt_imu.csv"
         gt = pd.read_csv(
-            gt_path, sep=",", comment="#", header=None,
+            gt_path,
+            sep=",",
+            comment="#",
+            header=None,
             names=["ts", "x", "y", "z", "qw", "qx", "qy", "qz"],
         )
 

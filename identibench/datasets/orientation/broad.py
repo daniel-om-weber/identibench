@@ -103,10 +103,10 @@ def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
 
         data = loadmat(str(mat_path), squeeze_me=True)
 
-        acc = np.asarray(data["imu_acc"], dtype=np.float64)      # (N, 3)
-        gyr = np.asarray(data["imu_gyr"], dtype=np.float64)      # (N, 3)
-        mag = np.asarray(data["imu_mag"], dtype=np.float64)       # (N, 3)
-        quat = np.asarray(data["opt_quat"], dtype=np.float64)     # (N, 4) wxyz
+        acc = np.asarray(data["imu_acc"], dtype=np.float64)  # (N, 3)
+        gyr = np.asarray(data["imu_gyr"], dtype=np.float64)  # (N, 3)
+        mag = np.asarray(data["imu_mag"], dtype=np.float64)  # (N, 3)
+        quat = np.asarray(data["opt_quat"], dtype=np.float64)  # (N, 4) wxyz
         fs = float(data["sampling_rate"])
         movement = np.asarray(data["movement"], dtype=np.float64).ravel()
 

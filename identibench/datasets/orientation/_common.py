@@ -36,9 +36,7 @@ def download_file(url: str, dest: Path, chunk_size: int = 8192, force: bool = Fa
     resp = requests.get(url, stream=True, timeout=(30, 300))
     resp.raise_for_status()
     total = int(resp.headers.get("content-length", 0))
-    with open(dest, "wb") as f, tqdm(
-        total=total or None, unit="B", unit_scale=True, desc=dest.name
-    ) as bar:
+    with open(dest, "wb") as f, tqdm(total=total or None, unit="B", unit_scale=True, desc=dest.name) as bar:
         for chunk in resp.iter_content(chunk_size=chunk_size):
             f.write(chunk)
             bar.update(len(chunk))

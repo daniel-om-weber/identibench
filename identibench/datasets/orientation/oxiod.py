@@ -180,11 +180,11 @@ def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
         # Columns: Time, attitude(roll/pitch/yaw), gyro(x/y/z), gravity(x/y/z),
         #          user_acc(x/y/z), mag(x/y/z)
         imu = np.loadtxt(imu_path, delimiter=",")
-        gravity = imu[:, 7:10]      # G units
-        user_acc = imu[:, 10:13]     # G units
+        gravity = imu[:, 7:10]  # G units
+        user_acc = imu[:, 10:13]  # G units
         acc = (gravity + user_acc) * G  # m/s^2
-        gyr = imu[:, 4:7]           # rad/s
-        mag = imu[:, 13:16]         # microtesla
+        gyr = imu[:, 4:7]  # rad/s
+        mag = imu[:, 13:16]  # microtesla
 
         # ── Load VI ground truth CSV (no header row) ──
         # Columns: Time, header, tx, ty, tz, qx, qy, qz, qw
