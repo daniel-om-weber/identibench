@@ -30,6 +30,8 @@ dependencies = [
     "bagpy",
     "numpy",
     "scipy",
+    "requests",
+    "tqdm",
 ]
 
 [project.optional-dependencies]

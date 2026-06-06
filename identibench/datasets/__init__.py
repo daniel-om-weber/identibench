@@ -4,8 +4,16 @@ from .industrial_robot import dl_robot_forward, dl_robot_inverse
 from .ship import dl_ship
 from .quad_pelican import dl_quad_pelican
 from .quad_pi import dl_quad_pi
-from .broad import dl_broad
 from .imu import dl_imu
+from .riann import (
+    dl_riann,
+    dl_broad,
+    dl_tumvi,
+    dl_oxiod,
+    dl_euroc,
+    dl_repoimu,
+    dl_caruso,
+)
 
 all_dataset_loaders = {
     "wiener_hammerstein": dl_wiener_hammerstein,
@@ -21,6 +29,12 @@ all_dataset_loaders = {
     "broad": dl_broad,
     "ced": dl_ced,
     "imu": dl_imu,
+    "riann": dl_riann,
+    "tumvi": dl_tumvi,
+    "oxiod": dl_oxiod,
+    "euroc": dl_euroc,
+    "repoimu": dl_repoimu,
+    "caruso": dl_caruso,
 }
 
 

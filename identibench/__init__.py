@@ -43,11 +43,21 @@ from .datasets.ship import BenchmarkShip_Simulation, BenchmarkShip_Prediction
 # Quadrotor Benchmarks
 from .datasets.quad_pelican import BenchmarkQuadPelican_Simulation, BenchmarkQuadPelican_Prediction
 from .datasets.quad_pi import BenchmarkQuadPi_Simulation, BenchmarkQuadPi_Prediction
-# Broad Benchmark
-# from .datasets.broad import BenchmarkBroad_Simulation, BenchmarkBroad_Prediction
 
 # IMU Benchmarks
 from .datasets.imu import BenchmarkIMU_Inclination, BenchmarkIMU_Relative
+
+# RIANN orientation-estimation Benchmarks
+from .datasets.riann import (
+    BenchmarkRIANN_Inclination,
+    BenchmarkBROAD_Inclination,
+    BenchmarkTUMVI_Inclination,
+    BenchmarkOxIOD_Inclination,
+    BenchmarkEuRoC_Inclination,
+    BenchmarkRepoIMU_Inclination,
+    BenchmarkCaruso_Inclination,
+    riann_benchmarks,
+)
 
 simulation_benchmarks = {
     "WH_Sim": BenchmarkWH_Simulation,
@@ -63,6 +73,13 @@ simulation_benchmarks = {
     "QuadPi_Sim": BenchmarkQuadPi_Simulation,
     "IMU_Inclination_Sim": BenchmarkIMU_Inclination,
     "IMU_Relative_Sim": BenchmarkIMU_Relative,
+    "RIANN_Inclination": BenchmarkRIANN_Inclination,
+    "BROAD_Inclination": BenchmarkBROAD_Inclination,
+    "TUMVI_Inclination": BenchmarkTUMVI_Inclination,
+    "OxIOD_Inclination": BenchmarkOxIOD_Inclination,
+    "EuRoC_Inclination": BenchmarkEuRoC_Inclination,
+    "RepoIMU_Inclination": BenchmarkRepoIMU_Inclination,
+    "Caruso_Inclination": BenchmarkCaruso_Inclination,
 }
 
 prediction_benchmarks = {

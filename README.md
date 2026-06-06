@@ -133,6 +133,60 @@ results = idb.run_benchmark(
 | `QuadPelican_Sim`  | BenchmarkQuadPelican_Simulation   |
 | `QuadPi_Sim`       | BenchmarkQuadPi_Simulation        |
 
+## Orientation (IMU) Benchmarks
+
+Estimate orientation (a unit quaternion) from 6-axis IMU data and score it with
+the inclination (tilt) error in degrees. These are `BenchmarkSpecSimulation`
+tasks — plug in any model via `build_model` (neural network, complementary
+filter, …).
+
+The **RIANN** benchmarks port the six datasets from
+[Weber et al. 2021](https://doi.org/10.3390/ai2030028). The combined `riann`
+benchmark reproduces the paper's pooled-train / cross-dataset-test protocol; the
+per-source benchmarks let you download and evaluate a single dataset in
+isolation. Each is downloaded from its original public source on first use.
+
+| Key                  | Benchmark Name                 | Files (role)            |
+|----------------------|--------------------------------|-------------------------|
+| `RIANN_Inclination`  | BenchmarkRIANN_Inclination     | 36 train / 6 valid / 119 test (all sources) |
+| `BROAD_Inclination`  | BenchmarkBROAD_Inclination     | 39 test                 |
+| `TUMVI_Inclination`  | BenchmarkTUMVI_Inclination     | 6 test                  |
+| `OxIOD_Inclination`  | BenchmarkOxIOD_Inclination     | 71 test                 |
+| `EuRoC_Inclination`  | BenchmarkEuRoC_Inclination     | 6 test                  |
+| `RepoIMU_Inclination`| BenchmarkRepoIMU_Inclination   | 21 test                 |
+| `Caruso_Inclination` | BenchmarkCaruso_Inclination    | 18 test                 |
+| `IMU_Inclination_Sim`| BenchmarkIMU_Inclination       | Weygers & Kok (2020)    |
+
+Inputs are `u_cols = [acc_x, acc_y, acc_z, gyr_x, gyr_y, gyr_z, dt]` (acc m/s²,
+gyr rad/s, `dt` the per-sample sampling interval in seconds) and the target is
+`y_cols = [opt_a, opt_b, opt_c, opt_d]` (quaternion `w, x, y, z`).
+
+```python
+import numpy as np
+import identibench as idb
+
+def build_model(context):
+    # A trivial baseline that always predicts the identity orientation.
+    def model(u, y_init, attrs):
+        return np.tile([1.0, 0.0, 0.0, 0.0], (len(u), 1))
+    return model
+
+# Evaluate on a single small dataset...
+result = idb.run_benchmark(idb.BenchmarkEuRoC_Inclination, build_model)
+
+# ...or reproduce the full RIANN cross-dataset protocol in one run.
+result = idb.run_benchmark(idb.BenchmarkRIANN_Inclination, build_model)
+print(result["metric_score"])          # aligned (unmasked) inclination RMSE, deg
+print(result["custom_scores"])         # faithful masked RMSE + 99th pct, per source
+```
+
+> **Which number to report.** `metric_score` is the first-sample-aligned but
+> *unmasked* inclination RMSE. RIANN's published numbers are the *masked* RMSE
+> and its 99th percentile, per dataset — these live in `custom_scores`
+> (`<source>/incl_rmse_deg`, `<source>/incl_p99_deg`, and pooled `all/…`),
+> surfaced as `cs_*` columns by `benchmark_results_to_dataframe`. See
+> `RIANN_INTEGRATION.md` for the full design.
+
 ## Prediction Benchmarks
 
 | Key                 | Benchmark Name                    |
