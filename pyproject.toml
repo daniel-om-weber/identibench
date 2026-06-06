@@ -41,6 +41,9 @@ dev = [
     "ruff",
     "ipykernel",
     "twine",
+    "jupytext>=1.19.3",
+    "matplotlib>=3.10.1",
+    "nbconvert>=7.17.1",
 ]
 
 [project.urls]
