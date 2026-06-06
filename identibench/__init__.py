@@ -44,11 +44,10 @@ from .datasets.ship import BenchmarkShip_Simulation, BenchmarkShip_Prediction
 from .datasets.quad_pelican import BenchmarkQuadPelican_Simulation, BenchmarkQuadPelican_Prediction
 from .datasets.quad_pi import BenchmarkQuadPi_Simulation, BenchmarkQuadPi_Prediction
 
-# IMU Benchmarks
-from .datasets.imu import BenchmarkIMU_Inclination, BenchmarkIMU_Relative
-
-# RIANN orientation-estimation Benchmarks
-from .datasets.riann import (
+# Orientation (IMU) Benchmarks — dfjimu dataset + the RIANN family
+from .datasets.orientation import (
+    BenchmarkDFJIMU_Inclination,
+    BenchmarkDFJIMU_Relative,
     BenchmarkRIANN_Inclination,
     BenchmarkBROAD_Inclination,
     BenchmarkTUMVI_Inclination,
@@ -57,6 +56,7 @@ from .datasets.riann import (
     BenchmarkRepoIMU_Inclination,
     BenchmarkCaruso_Inclination,
     riann_benchmarks,
+    orientation_benchmarks,
 )
 
 simulation_benchmarks = {
@@ -71,8 +71,8 @@ simulation_benchmarks = {
     "Ship_Sim": BenchmarkShip_Simulation,
     "QuadPelican_Sim": BenchmarkQuadPelican_Simulation,
     "QuadPi_Sim": BenchmarkQuadPi_Simulation,
-    "IMU_Inclination_Sim": BenchmarkIMU_Inclination,
-    "IMU_Relative_Sim": BenchmarkIMU_Relative,
+    "DFJIMU_Inclination": BenchmarkDFJIMU_Inclination,
+    "DFJIMU_Relative": BenchmarkDFJIMU_Relative,
     "RIANN_Inclination": BenchmarkRIANN_Inclination,
     "BROAD_Inclination": BenchmarkBROAD_Inclination,
     "TUMVI_Inclination": BenchmarkTUMVI_Inclination,

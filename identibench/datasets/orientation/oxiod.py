@@ -11,9 +11,10 @@ from pathlib import Path
 
 import numpy as np
 
-from ._common import extract_archive, fix_quaternion_flips, write_hdf5
+from ._common import _prepare, _spec, _test_role, extract_archive, fix_quaternion_flips, write_hdf5
 
 G = 9.81  # m/s^2
+SOURCE_DIR = "OxIOD"  # sub-directory convert() writes into / routing key
 
 # Expected output files derived from existing data directory listing.
 EXPECTED_FILES = [
@@ -102,18 +103,18 @@ _GDRIVE_ID = "1UCHY3ENCybcBNyiC2wx1gQEWSLqzJag0"
 _ZIP_NAME = "Oxford_Inertial_Odometry_Dataset_2.0.zip"
 
 
-def download(raw_dir: Path) -> None:
+def download(raw_dir: Path, force: bool = False) -> None:
     """Download OxIOD ZIP from Google Drive and extract."""
     oxiod_dir = raw_dir / "OxIOD"
     oxiod_dir.mkdir(parents=True, exist_ok=True)
     zip_path = oxiod_dir / _ZIP_NAME
 
     # Check if already extracted
-    if any(oxiod_dir.glob("*/data*/syn/imu*.csv")):
+    if not force and any(oxiod_dir.glob("*/data*/syn/imu*.csv")):
         print("  OxIOD raw data already extracted.")
         return
 
-    if not zip_path.exists():
+    if force or not zip_path.exists():
         try:
             import gdown
         except ImportError:
@@ -154,7 +155,7 @@ def _find_imu_vi_pairs(oxiod_dir: Path) -> list[tuple[str, int, int, Path, Path]
     return pairs
 
 
-def convert(raw_dir: Path, out_dir: Path) -> None:
+def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / "OxIOD"
     out_dir = out_dir / "OxIOD"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -171,7 +172,7 @@ def convert(raw_dir: Path, out_dir: Path) -> None:
     for cat, dnum, snum, imu_path, vi_path in pairs:
         out_name = f"OxIOD::{cat}_data{dnum}_{snum}:fixed.hdf5"
         out_path = out_dir / out_name
-        if out_path.exists():
+        if out_path.exists() and not force:
             print(f"  Skipping (exists): {out_path.name}")
             continue
 
@@ -194,3 +195,11 @@ def convert(raw_dir: Path, out_dir: Path) -> None:
 
         print(f"  Writing {out_path.name}  ({len(acc)} samples)")
         write_hdf5(out_path, acc, gyr, quat, dt=0.01, mag=mag)
+
+
+def dl_oxiod(save_path, force_download: bool = False) -> None:
+    """Download + convert OxIOD into ``save_path/test/`` (all files are test)."""
+    _prepare(save_path, [(download, convert, SOURCE_DIR)], _test_role, force_download=force_download)
+
+
+BenchmarkOxIOD_Inclination = _spec("BenchmarkOxIOD_Inclination", "oxiod", dl_oxiod)

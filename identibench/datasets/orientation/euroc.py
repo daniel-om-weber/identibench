@@ -13,7 +13,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ._common import download_file, extract_archive, fix_quaternion_flips, write_hdf5
+from ._common import _prepare, _spec, _test_role, download_file, extract_archive, fix_quaternion_flips, write_hdf5
+
+SOURCE_DIR = "EuRoC-MAV"  # sub-directory convert() writes into / routing key
 
 SEQUENCES = [
     ("vicon_room1", "V1_01_easy"),
@@ -30,11 +32,11 @@ _BUNDLES = {
 }
 
 
-def download(raw_dir: Path) -> None:
+def download(raw_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / "euroc"
     for room, url in _BUNDLES.items():
         dest = raw_dir / f"{room}.zip"
-        download_file(url, dest)
+        download_file(url, dest, force=force)
 
 
 def _find_seq_dir(raw_dir: Path, seq: str) -> Path | None:
@@ -50,7 +52,7 @@ def _find_seq_dir(raw_dir: Path, seq: str) -> Path | None:
     return None
 
 
-def _ensure_extracted(raw_dir: Path) -> None:
+def _ensure_extracted(raw_dir: Path, force: bool = False) -> None:
     """Extract room bundles and nested per-sequence ZIPs as needed."""
     for room in _BUNDLES:
         bundle_zip = raw_dir / f"{room}.zip"
@@ -58,12 +60,12 @@ def _ensure_extracted(raw_dir: Path) -> None:
             continue
         # Extract the outer bundle to get per-sequence ZIPs
         room_dir = raw_dir / room
-        if not room_dir.exists():
+        if force or not room_dir.exists():
             print(f"  Extracting {bundle_zip.name} ...")
             extract_archive(bundle_zip, raw_dir)
         # Extract each inner per-sequence ZIP into its own directory
         for _, seq in SEQUENCES:
-            if _find_seq_dir(raw_dir, seq):
+            if not force and _find_seq_dir(raw_dir, seq):
                 continue
             inner_zip = room_dir / seq / f"{seq}.zip"
             if inner_zip.exists():
@@ -73,16 +75,16 @@ def _ensure_extracted(raw_dir: Path) -> None:
                 extract_archive(inner_zip, seq_dir)
 
 
-def convert(raw_dir: Path, out_dir: Path) -> None:
+def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / "euroc"
     out_dir = out_dir / "EuRoC-MAV"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    _ensure_extracted(raw_dir)
+    _ensure_extracted(raw_dir, force=force)
 
     for _, seq in SEQUENCES:
         out_path = out_dir / f"EurocMAV::{seq}.hdf5"
-        if out_path.exists():
+        if out_path.exists() and not force:
             print(f"  Skipping (exists): {out_path.name}")
             continue
 
@@ -138,3 +140,11 @@ def convert(raw_dir: Path, out_dir: Path) -> None:
 
         print(f"  Writing {out_path.name}  ({len(acc)} samples)")
         write_hdf5(out_path, acc, gyr, quat, dt=1.0 / 200.0)
+
+
+def dl_euroc(save_path, force_download: bool = False) -> None:
+    """Download + convert EuRoC-MAV into ``save_path/test/`` (all files are test)."""
+    _prepare(save_path, [(download, convert, SOURCE_DIR)], _test_role, force_download=force_download)
+
+
+BenchmarkEuRoC_Inclination = _spec("BenchmarkEuRoC_Inclination", "euroc", dl_euroc)

@@ -18,9 +18,10 @@ from pathlib import Path
 import numpy as np
 from scipy.io import loadmat
 
-from ._common import download_file, extract_archive, fix_quaternion_flips, write_hdf5
+from ._common import _prepare, _spec, _test_role, download_file, extract_archive, fix_quaternion_flips, write_hdf5
 
 _REPO_ZIP = "https://github.com/dlaidig/broad/archive/refs/heads/main.zip"
+SOURCE_DIR = "Myon"  # sub-directory convert() writes into / routing key
 
 # Known Myon output filenames keyed by trial number (01-39).
 MYON_NAMES = {
@@ -66,19 +67,19 @@ MYON_NAMES = {
 }
 
 
-def download(raw_dir: Path) -> None:
+def download(raw_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / "broad"
-    download_file(_REPO_ZIP, raw_dir / "broad-main.zip")
+    download_file(_REPO_ZIP, raw_dir / "broad-main.zip", force=force)
 
 
-def convert(raw_dir: Path, out_dir: Path) -> None:
+def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / "broad"
     out_dir = out_dir / "Myon"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     zip_path = raw_dir / "broad-main.zip"
     ext_dir = raw_dir / "broad-main"
-    if not ext_dir.exists():
+    if force or not ext_dir.exists():
         print("  Extracting BROAD repo ...")
         extract_archive(zip_path, raw_dir)
 
@@ -96,7 +97,7 @@ def convert(raw_dir: Path, out_dir: Path) -> None:
             continue
 
         out_path = out_dir / f"{myon_name}.hdf5"
-        if out_path.exists():
+        if out_path.exists() and not force:
             print(f"  Skipping (exists): {out_path.name}")
             continue
 
@@ -114,3 +115,11 @@ def convert(raw_dir: Path, out_dir: Path) -> None:
 
         print(f"  Writing {out_path.name}  ({len(acc)} samples, {fs:.1f} Hz)")
         write_hdf5(out_path, acc, gyr, quat, dt, mag=mag, movement_mask=movement)
+
+
+def dl_broad(save_path, force_download: bool = False) -> None:
+    """Download + convert BROAD into ``save_path/test/`` (all files are test)."""
+    _prepare(save_path, [(download, convert, SOURCE_DIR)], _test_role, force_download=force_download)
+
+
+BenchmarkBROAD_Inclination = _spec("BenchmarkBROAD_Inclination", "broad", dl_broad)

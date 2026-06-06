@@ -26,22 +26,24 @@ from pathlib import Path
 import numpy as np
 from scipy.io import loadmat
 
-from ._common import download_file, fix_quaternion_flips, write_hdf5
+from ._common import _prepare, _spec, _test_role, download_file, fix_quaternion_flips, write_hdf5
 
 _RELEASE = "https://github.com/marcocaruso/mimu_optical_dataset_caruso_sassari/releases/download/v5.0"
+# convert() also writes Caruso-Sassari_orig; only this dir is routed/kept.
+SOURCE_DIR = "Caruso-Sassari"
 _SPEEDS = ["slow", "medium", "fast"]
 _SENSOR_KEYS = ["AP1", "AP2", "SH1", "SH2", "XS1", "XS2"]
 _INDEX_KEYS = ["indarb", "indx", "indy", "indz"]
 
 
-def download(raw_dir: Path) -> None:
+def download(raw_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / "caruso"
     for speed in _SPEEDS:
         url = f"{_RELEASE}/{speed}_v5.mat"
-        download_file(url, raw_dir / f"{speed}_v5.mat")
+        download_file(url, raw_dir / f"{speed}_v5.mat", force=force)
 
 
-def convert(raw_dir: Path, out_dir: Path) -> None:
+def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / "caruso"
     dir_main = out_dir / "Caruso-Sassari"
     dir_orig = out_dir / "Caruso-Sassari_orig"
@@ -84,7 +86,7 @@ def convert(raw_dir: Path, out_dir: Path) -> None:
 
             # Caruso-Sassari_orig: Qs as-is (no flip correction)
             out_orig = dir_orig / f"Marco::{out_name}.hdf5"
-            if out_orig.exists():
+            if out_orig.exists() and not force:
                 print(f"    Skipping (exists): {out_orig.name}")
             else:
                 print(f"    Writing {out_orig.name}  ({n_samples} samples)")
@@ -92,8 +94,16 @@ def convert(raw_dir: Path, out_dir: Path) -> None:
 
             # Caruso-Sassari: Qs with flip correction
             out_main = dir_main / f"Marco::{out_name}.hdf5"
-            if out_main.exists():
+            if out_main.exists() and not force:
                 print(f"    Skipping (exists): {out_main.name}")
             else:
                 print(f"    Writing {out_main.name}  ({n_samples} samples)")
                 write_hdf5(out_main, acc, gyr, qs_flipped, dt, mag=mag, movement_mask=movement)
+
+
+def dl_caruso(save_path, force_download: bool = False) -> None:
+    """Download + convert Caruso-Sassari into ``save_path/test/`` (all files are test)."""
+    _prepare(save_path, [(download, convert, SOURCE_DIR)], _test_role, force_download=force_download)
+
+
+BenchmarkCaruso_Inclination = _spec("BenchmarkCaruso_Inclination", "caruso", dl_caruso)

@@ -1,6 +1,15 @@
 """Metric functions for evaluating system identification models."""
 
-__all__ = ["rmse", "nrmse", "fit_index", "mae", "r_squared", "inclination_rmse_deg", "orientation_rmse_deg"]
+__all__ = [
+    "rmse",
+    "nrmse",
+    "fit_index",
+    "mae",
+    "r_squared",
+    "inclination_rmse_deg",
+    "orientation_rmse_deg",
+    "aligned_inclination_rmse_deg",
+]
 
 import numpy as np
 import warnings
@@ -147,17 +156,31 @@ def _quat_normalize(q: np.ndarray) -> np.ndarray:
     return q / np.linalg.norm(q, axis=-1, keepdims=True)
 
 
+def _quat_conj(q: np.ndarray) -> np.ndarray:
+    """Conjugate (the inverse for a unit quaternion). Shape: (..., 4), [w,x,y,z]."""
+    out = np.array(q, dtype=np.float64, copy=True)
+    out[..., 1:] *= -1.0
+    return out
+
+
+def _quat_mul(a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """Hamilton product a ⊗ b. Shapes broadcast on (..., 4), [w,x,y,z] convention."""
+    aw, ax, ay, az = a[..., 0], a[..., 1], a[..., 2], a[..., 3]
+    bw, bx, by, bz = b[..., 0], b[..., 1], b[..., 2], b[..., 3]
+    return np.stack(
+        [
+            aw * bw - ax * bx - ay * by - az * bz,
+            aw * bx + ax * bw + ay * bz - az * by,
+            aw * by - ax * bz + ay * bw + az * bx,
+            aw * bz + ax * by - ay * bx + az * bw,
+        ],
+        axis=-1,
+    )
+
+
 def _quat_diff(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
-    """Compute difference quaternion q1 * inv(q2). Inputs shape: (..., 4), [w,x,y,z] convention."""
-    q1 = _quat_normalize(q1)
-    q2 = _quat_normalize(q2)
-    w1, x1, y1, z1 = q1[..., 0], q1[..., 1], q1[..., 2], q1[..., 3]
-    w2, x2, y2, z2 = q2[..., 0], q2[..., 1], q2[..., 2], q2[..., 3]
-    ow = w1 * w2 + x1 * x2 + y1 * y2 + z1 * z2
-    ox = -w1 * x2 + x1 * w2 - y1 * z2 + z1 * y2
-    oy = -w1 * y2 + x1 * z2 + y1 * w2 - z1 * x2
-    oz = -w1 * z2 - x1 * y2 + y1 * x2 + z1 * w2
-    return np.stack([ow, ox, oy, oz], axis=-1)
+    """Difference quaternion q1 ⊗ inv(q2). Inputs shape: (..., 4), [w,x,y,z] convention."""
+    return _quat_mul(_quat_normalize(q1), _quat_conj(_quat_normalize(q2)))
 
 
 def _inclination_angle(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
@@ -178,6 +201,34 @@ def _relative_angle(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
     )
 
 
+def _aligned_inclination_rad(pred: np.ndarray, true: np.ndarray) -> np.ndarray:
+    """Per-sample inclination (tilt) error in radians, after removing the constant
+    orientation offset between the two frames.
+
+    The estimate is aligned to ground truth at the first sample where both are
+    finite (``offset = gt0 ⊗ inv(est0)``, applied to all samples). This removes the
+    fixed rotation between, e.g., an IMU's gravity-defined frame and an optical
+    reference frame. Samples where either quaternion is non-finite are returned as
+    NaN (so callers can mask them out).
+    """
+    pred = np.asarray(pred, dtype=np.float64)
+    true = np.asarray(true, dtype=np.float64)
+    n = min(len(pred), len(true))
+    pred, true = pred[:n], true[:n]
+
+    out = np.full(n, np.nan)
+    finite = np.isfinite(pred).all(-1) & np.isfinite(true).all(-1)
+    if not finite.any():
+        return out
+
+    i0 = int(np.argmax(finite))  # first finite index
+    offset = _quat_mul(_quat_normalize(true[i0]), _quat_conj(_quat_normalize(pred[i0])))  # (4,)
+    pred_aligned = _quat_mul(offset[None, :], _quat_normalize(pred))  # (N, 4)
+    ang = _inclination_angle(pred_aligned, true)  # (N,) radians
+    out[finite] = ang[finite]
+    return out
+
+
 def inclination_rmse_deg(
     inp: np.ndarray,  # Predicted quaternions, shape (N, 4), [w, x, y, z].
     targ: np.ndarray,  # Ground truth quaternions, shape (N, 4), [w, x, y, z].
@@ -196,6 +247,27 @@ def inclination_rmse_deg(
         raise ValueError(f"Expected quaternion arrays with last dimension 4, got {inp.shape[-1]}")
     angles_rad = _inclination_angle(inp, targ)
     return float(np.sqrt(np.mean(angles_rad**2)) * 180.0 / np.pi)
+
+
+def aligned_inclination_rmse_deg(
+    inp: np.ndarray,  # Predicted quaternions, shape (N, 4), [w, x, y, z].
+    targ: np.ndarray,  # Ground truth quaternions, shape (N, 4), [w, x, y, z].
+) -> float:  # RMS inclination error in degrees after first-sample alignment.
+    """
+    Computes the RMS inclination (tilt) error in degrees after first-sample alignment.
+
+    Like :func:`inclination_rmse_deg`, but first removes the constant orientation
+    offset between the two frames by aligning the estimate to ground truth at the
+    first finite sample. Use this when the prediction lives in a different fixed
+    reference frame than the target (e.g. an IMU gravity frame vs. an optical mocap
+    frame). Non-finite ground-truth samples are ignored; no movement masking is
+    applied.
+    """
+    incl = _aligned_inclination_rad(inp, targ)
+    incl = incl[np.isfinite(incl)]
+    if incl.size == 0:
+        return float("nan")
+    return float(np.sqrt(np.mean(incl**2)) * 180.0 / np.pi)
 
 
 def orientation_rmse_deg(

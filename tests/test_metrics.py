@@ -2,7 +2,17 @@
 
 import numpy as np
 import pytest
-from identibench.metrics import rmse, nrmse, fit_index, mae, r_squared, inclination_rmse_deg, orientation_rmse_deg
+from identibench.metrics import (
+    rmse,
+    nrmse,
+    fit_index,
+    mae,
+    r_squared,
+    inclination_rmse_deg,
+    orientation_rmse_deg,
+    aligned_inclination_rmse_deg,
+    _quat_mul,
+)
 
 
 # --- Test data ---
@@ -215,3 +225,42 @@ class TestOrientationRmseDeg:
         q = np.random.randn(50, 4)
         q = q / np.linalg.norm(q, axis=1, keepdims=True)
         assert isinstance(orientation_rmse_deg(q, q), float)
+
+
+# --- Aligned Inclination RMSE Tests ---
+
+
+def _quat_about_x(angle_deg: float) -> np.ndarray:
+    """Unit quaternion of a rotation by angle_deg about the x-axis."""
+    a = np.deg2rad(angle_deg) / 2
+    return np.array([np.cos(a), np.sin(a), 0.0, 0.0])
+
+
+def _random_unit_quats(n: int, seed: int = 0) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    q = rng.standard_normal((n, 4))
+    return q / np.linalg.norm(q, axis=1, keepdims=True)
+
+
+class TestAlignedInclinationRmseDeg:
+    def test_constant_offset_is_removed(self):
+        """A fixed rotation between the two frames must align away to ~0."""
+        q = _random_unit_quats(400)
+        offset = _quat_about_x(25.0)
+        pred = _quat_mul(offset[None, :], q)  # constant rotation applied to all samples
+        assert aligned_inclination_rmse_deg(pred, q) == pytest.approx(0.0, abs=1e-6)
+
+    def test_time_varying_tilt_is_measured(self):
+        q = _random_unit_quats(400)
+        pred = q.copy()
+        # 30 deg tilt on the second half only -> a real residual after sample-0 alignment
+        pred[200:] = _quat_mul(_quat_about_x(30.0)[None, :], q[200:])
+        rmse_deg = aligned_inclination_rmse_deg(pred, q)
+        # 30 deg on half the samples -> 30*sqrt(1/2) ≈ 21.2 deg RMS
+        assert rmse_deg == pytest.approx(30.0 * np.sqrt(0.5), rel=0.02)
+
+    def test_nan_ground_truth_ignored(self):
+        q = _random_unit_quats(300)
+        q_nan = q.copy()
+        q_nan[10:40] = np.nan
+        assert aligned_inclination_rmse_deg(q, q_nan) == pytest.approx(0.0, abs=1e-6)

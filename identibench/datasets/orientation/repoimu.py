@@ -16,9 +16,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from ._common import download_file, extract_archive, fix_quaternion_flips, write_hdf5
+from ._common import _prepare, _spec, _test_role, download_file, extract_archive, fix_quaternion_flips, write_hdf5
 
 _REPO_ZIP = "https://github.com/agnieszkaszczesna/RepoIMU/archive/refs/heads/master.zip"
+SOURCE_DIR = "RepoIMU"  # sub-directory convert() writes into / routing key
 
 # Expected output files (derived from existing Myon HDF5 directory listing).
 # Maps (test_num, trial_num) → output name.
@@ -41,12 +42,12 @@ _COL_NAMES = [
 ]
 
 
-def download(raw_dir: Path) -> None:
+def download(raw_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / "repoimu"
-    download_file(_REPO_ZIP, raw_dir / "RepoIMU-master.zip")
+    download_file(_REPO_ZIP, raw_dir / "RepoIMU-master.zip", force=force)
 
 
-def convert(raw_dir: Path, out_dir: Path) -> None:
+def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / "repoimu"
     out_dir = out_dir / "RepoIMU"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -56,7 +57,7 @@ def convert(raw_dir: Path, out_dir: Path) -> None:
     ext_dir = raw_dir / "RepoIMU-master"
     if not ext_dir.exists():
         ext_dir = raw_dir / "RepoIMU-main"
-    if not ext_dir.exists():
+    if force or not ext_dir.exists():
         print("  Extracting RepoIMU repo ...")
         extract_archive(zip_path, raw_dir)
         # Detect whichever directory was created
@@ -82,7 +83,7 @@ def convert(raw_dir: Path, out_dir: Path) -> None:
 
         out_name = f"RepoIMU::TStick_{test_num:02d}_{trial_num}.hdf5"
         out_path = out_dir / out_name
-        if out_path.exists():
+        if out_path.exists() and not force:
             print(f"  Skipping (exists): {out_path.name}")
             continue
 
@@ -98,3 +99,11 @@ def convert(raw_dir: Path, out_dir: Path) -> None:
 
         print(f"  Writing {out_path.name}  ({len(acc)} samples)")
         write_hdf5(out_path, acc, gyr, quat, dt, mag=mag)
+
+
+def dl_repoimu(save_path, force_download: bool = False) -> None:
+    """Download + convert RepoIMU into ``save_path/test/`` (all files are test)."""
+    _prepare(save_path, [(download, convert, SOURCE_DIR)], _test_role, force_download=force_download)
+
+
+BenchmarkRepoIMU_Inclination = _spec("BenchmarkRepoIMU_Inclination", "repoimu", dl_repoimu)

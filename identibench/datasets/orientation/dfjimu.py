@@ -1,13 +1,13 @@
-"""IMU orientation benchmark dataset from Weygers & Kok (2020)."""
+"""Weygers & Kok (2020) IMU orientation dataset (the *dfjimu* dataset)."""
 
 __all__ = [
-    "dl_imu",
-    "BenchmarkIMU_Inclination",
-    "BenchmarkIMU_Relative",
-    "imu_split_all_test",
-    "imu_split_train_test",
-    "imu_split_all_test_persensor",
-    "imu_split_train_test_persensor",
+    "dl_dfjimu",
+    "BenchmarkDFJIMU_Inclination",
+    "BenchmarkDFJIMU_Relative",
+    "dfjimu_split_all_test",
+    "dfjimu_split_train_test",
+    "dfjimu_split_all_test_persensor",
+    "dfjimu_split_train_test_persensor",
 ]
 
 from io import BytesIO
@@ -19,7 +19,7 @@ import requests
 import scipy.io
 
 import identibench.benchmark as idb
-from identibench.metrics import inclination_rmse_deg, orientation_rmse_deg
+from identibench.metrics import inclination_rmse_deg, orientation_rmse_deg, _quat_conj, _quat_mul
 from identibench.utils import write_dataset
 
 ALL_FILES = [
@@ -46,24 +46,24 @@ ALL_HDF5_FILES_PERSENSOR = [f"{name}_{s}.hdf5" for name in ALL_FILES for s in ("
 _xyz = ["x", "y", "z"]
 _wxyz = ["w", "x", "y", "z"]
 
-imu_u_s1_cols = [f"acc1_{a}" for a in _xyz] + [f"gyr1_{a}" for a in _xyz]
-imu_u_s2_cols = [f"acc2_{a}" for a in _xyz] + [f"gyr2_{a}" for a in _xyz]
-imu_u_cols = imu_u_s1_cols + imu_u_s2_cols
+dfjimu_u_s1_cols = [f"acc1_{a}" for a in _xyz] + [f"gyr1_{a}" for a in _xyz]
+dfjimu_u_s2_cols = [f"acc2_{a}" for a in _xyz] + [f"gyr2_{a}" for a in _xyz]
+dfjimu_u_cols = dfjimu_u_s1_cols + dfjimu_u_s2_cols
 
-imu_u_generic = [f"acc_{a}" for a in _xyz] + [f"gyr_{a}" for a in _xyz]
+dfjimu_u_generic = [f"acc_{a}" for a in _xyz] + [f"gyr_{a}" for a in _xyz]
 
-imu_y_q1_cols = [f"q1_{a}" for a in _wxyz]
-imu_y_q2_cols = [f"q2_{a}" for a in _wxyz]
-imu_y_rel_cols = [f"qrel_{a}" for a in _wxyz]
-imu_y_q_generic = [f"q_{a}" for a in _wxyz]
+dfjimu_y_q1_cols = [f"q1_{a}" for a in _wxyz]
+dfjimu_y_q2_cols = [f"q2_{a}" for a in _wxyz]
+dfjimu_y_rel_cols = [f"qrel_{a}" for a in _wxyz]
+dfjimu_y_q_generic = [f"q_{a}" for a in _wxyz]
 
 # --- Split definitions ---
 
-imu_split_all_test = {
+dfjimu_split_all_test = {
     "test": ALL_HDF5_FILES,
 }
 
-imu_split_train_test = {
+dfjimu_split_train_test = {
     "train": [
         f"{n}.hdf5"
         for n in [
@@ -96,11 +96,11 @@ _TRAIN_NAMES = [
 _VALID_NAMES = ["data_1D_04", "data_2D_05", "data_3D_04"]
 _TEST_NAMES = ["data_1D_05", "data_2D_07", "data_3D_05"]
 
-imu_split_all_test_persensor = {
+dfjimu_split_all_test_persensor = {
     "test": ALL_HDF5_FILES_PERSENSOR,
 }
 
-imu_split_train_test_persensor = {
+dfjimu_split_train_test_persensor = {
     "train": [f"{n}_{s}.hdf5" for n in _TRAIN_NAMES for s in ("s1", "s2")],
     "valid": [f"{n}_{s}.hdf5" for n in _VALID_NAMES for s in ("s1", "s2")],
     "test": [f"{n}_{s}.hdf5" for n in _TEST_NAMES for s in ("s1", "s2")],
@@ -108,29 +108,23 @@ imu_split_train_test_persensor = {
 
 
 def _quat_relative(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
-    """Compute q1 * inv(q2) for unit quaternions. Shape: (N, 4), [w,x,y,z]."""
-    w1, x1, y1, z1 = q1[:, 0], q1[:, 1], q1[:, 2], q1[:, 3]
-    w2, x2, y2, z2 = q2[:, 0], q2[:, 1], q2[:, 2], q2[:, 3]
-    ow = w1 * w2 + x1 * x2 + y1 * y2 + z1 * z2
-    ox = -w1 * x2 + x1 * w2 - y1 * z2 + z1 * y2
-    oy = -w1 * y2 + x1 * z2 + y1 * w2 - z1 * x2
-    oz = -w1 * z2 - x1 * y2 + y1 * x2 + z1 * w2
-    return np.stack([ow, ox, oy, oz], axis=-1)
+    """Relative orientation q1 ⊗ inv(q2) for unit quaternions. Shape: (N, 4), [w,x,y,z]."""
+    return _quat_mul(q1, _quat_conj(q2))
 
 
 GITHUB_RAW_BASE = "https://raw.githubusercontent.com/daniel-om-weber/dfjimu/main/data"
 
 _SENSOR_MAPPINGS = [
-    ("s1", list(zip(imu_u_generic, imu_u_s1_cols)) + list(zip(imu_y_q_generic, imu_y_q1_cols))),
-    ("s2", list(zip(imu_u_generic, imu_u_s2_cols)) + list(zip(imu_y_q_generic, imu_y_q2_cols))),
+    ("s1", list(zip(dfjimu_u_generic, dfjimu_u_s1_cols)) + list(zip(dfjimu_y_q_generic, dfjimu_y_q1_cols))),
+    ("s2", list(zip(dfjimu_u_generic, dfjimu_u_s2_cols)) + list(zip(dfjimu_y_q_generic, dfjimu_y_q2_cols))),
 ]
 
 
-def dl_imu(
+def dl_dfjimu(
     save_path: Path,
     force_download: bool = False,
 ) -> None:
-    """Download IMU .mat files from GitHub and convert to HDF5 (flat directory)."""
+    """Download dfjimu .mat files from GitHub and convert to HDF5 (flat directory)."""
     save_path = Path(save_path)
     all_files = ALL_HDF5_FILES + ALL_HDF5_FILES_PERSENSOR
     if save_path.is_dir() and not force_download:
@@ -162,13 +156,13 @@ def dl_imu(
         fs = float(data.rate)
 
         with h5py.File(hdf5_path, "w") as f:
-            for i, col in enumerate(imu_u_cols):
+            for i, col in enumerate(dfjimu_u_cols):
                 write_dataset(f, col, sensor_data[:, i])
-            for i, col in enumerate(imu_y_q1_cols):
+            for i, col in enumerate(dfjimu_y_q1_cols):
                 write_dataset(f, col, q1_ref[:, i])
-            for i, col in enumerate(imu_y_q2_cols):
+            for i, col in enumerate(dfjimu_y_q2_cols):
                 write_dataset(f, col, q2_ref[:, i])
-            for i, col in enumerate(imu_y_rel_cols):
+            for i, col in enumerate(dfjimu_y_rel_cols):
                 write_dataset(f, col, q_rel[:, i])
             f.attrs["fs"] = fs
             f.attrs["r_12"] = r_12
@@ -191,26 +185,26 @@ def dl_imu(
 
 # --- Benchmark specifications ---
 
-BenchmarkIMU_Inclination = idb.BenchmarkSpecSimulation(
-    name="BenchmarkIMU_Inclination",
-    dataset_id="imu",
-    u_cols=imu_u_generic,
-    y_cols=imu_y_q_generic,
+BenchmarkDFJIMU_Inclination = idb.BenchmarkSpecSimulation(
+    name="BenchmarkDFJIMU_Inclination",
+    dataset_id="dfjimu",
+    u_cols=dfjimu_u_generic,
+    y_cols=dfjimu_y_q_generic,
     metric_func=inclination_rmse_deg,
-    download_func=dl_imu,
+    download_func=dl_dfjimu,
     sampling_time=1.0 / 50.0,
     init_window=0,
-    split=imu_split_all_test_persensor,
+    split=dfjimu_split_all_test_persensor,
 )
 
-BenchmarkIMU_Relative = idb.BenchmarkSpecSimulation(
-    name="BenchmarkIMU_Relative",
-    dataset_id="imu",
-    u_cols=imu_u_cols,
-    y_cols=imu_y_rel_cols,
+BenchmarkDFJIMU_Relative = idb.BenchmarkSpecSimulation(
+    name="BenchmarkDFJIMU_Relative",
+    dataset_id="dfjimu",
+    u_cols=dfjimu_u_cols,
+    y_cols=dfjimu_y_rel_cols,
     metric_func=orientation_rmse_deg,
-    download_func=dl_imu,
+    download_func=dl_dfjimu,
     sampling_time=1.0 / 50.0,
     init_window=0,
-    split=imu_split_all_test,
+    split=dfjimu_split_all_test,
 )

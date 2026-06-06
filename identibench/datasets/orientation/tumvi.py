@@ -17,23 +17,28 @@ import requests
 from tqdm import tqdm
 
 from ._common import (
+    _prepare,
+    _spec,
+    _test_role,
     fix_quaternion_flips,
     write_hdf5,
 )
+
+SOURCE_DIR = "TUM-VI"  # sub-directory convert() writes into / routing key
 
 _BASE = "https://cvg.cit.tum.de/tumvi/exported/euroc/512_16"
 _ROOMS = list(range(1, 7))
 _NEEDED = {"imu.txt", "gt_imu.csv"}
 
 
-def download(raw_dir: Path) -> None:
+def download(raw_dir: Path, force: bool = False) -> None:
     """Stream each tar and extract only imu.txt + gt_imu.csv (skip camera data)."""
     raw_dir = raw_dir / "tumvi"
     for n in _ROOMS:
         seq_name = f"dataset-room{n}_512_16"
         ext_dir = raw_dir / seq_name / "dso"
         # Skip if both files already extracted
-        if (ext_dir / "imu.txt").exists() and (ext_dir / "gt_imu.csv").exists():
+        if not force and (ext_dir / "imu.txt").exists() and (ext_dir / "gt_imu.csv").exists():
             print(f"  Already extracted: {seq_name}/dso/imu.txt + gt_imu.csv")
             continue
 
@@ -84,14 +89,14 @@ class _ProgressReader:
         return n
 
 
-def convert(raw_dir: Path, out_dir: Path) -> None:
+def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / "tumvi"
     out_dir = out_dir / "TUM-VI"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for n in _ROOMS:
         out_path = out_dir / f"TumVI::room{n}.hdf5"
-        if out_path.exists():
+        if out_path.exists() and not force:
             print(f"  Skipping (exists): {out_path.name}")
             continue
 
@@ -160,3 +165,11 @@ def convert(raw_dir: Path, out_dir: Path) -> None:
 
         print(f"  Writing {out_path.name}  ({len(acc)} samples)")
         write_hdf5(out_path, acc, gyr, quat, dt=0.005)
+
+
+def dl_tumvi(save_path, force_download: bool = False) -> None:
+    """Download + convert TUM-VI into ``save_path/test/`` (all files are test)."""
+    _prepare(save_path, [(download, convert, SOURCE_DIR)], _test_role, force_download=force_download)
+
+
+BenchmarkTUMVI_Inclination = _spec("BenchmarkTUMVI_Inclination", "tumvi", dl_tumvi)

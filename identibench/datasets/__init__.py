@@ -4,8 +4,8 @@ from .industrial_robot import dl_robot_forward, dl_robot_inverse
 from .ship import dl_ship
 from .quad_pelican import dl_quad_pelican
 from .quad_pi import dl_quad_pi
-from .imu import dl_imu
-from .riann import (
+from .orientation import (
+    dl_dfjimu,
     dl_riann,
     dl_broad,
     dl_tumvi,
@@ -28,7 +28,7 @@ all_dataset_loaders = {
     "quad_pi": dl_quad_pi,
     "broad": dl_broad,
     "ced": dl_ced,
-    "imu": dl_imu,
+    "dfjimu": dl_dfjimu,
     "riann": dl_riann,
     "tumvi": dl_tumvi,
     "oxiod": dl_oxiod,

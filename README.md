@@ -155,11 +155,14 @@ isolation. Each is downloaded from its original public source on first use.
 | `EuRoC_Inclination`  | BenchmarkEuRoC_Inclination     | 6 test                  |
 | `RepoIMU_Inclination`| BenchmarkRepoIMU_Inclination   | 21 test                 |
 | `Caruso_Inclination` | BenchmarkCaruso_Inclination    | 18 test                 |
-| `IMU_Inclination_Sim`| BenchmarkIMU_Inclination       | Weygers & Kok (2020)    |
+| `DFJIMU_Inclination` | BenchmarkDFJIMU_Inclination    | Weygers & Kok (2020)    |
+| `DFJIMU_Relative`    | BenchmarkDFJIMU_Relative       | Weygers & Kok (2020)    |
 
-Inputs are `u_cols = [acc_x, acc_y, acc_z, gyr_x, gyr_y, gyr_z, dt]` (acc m/s²,
-gyr rad/s, `dt` the per-sample sampling interval in seconds) and the target is
-`y_cols = [opt_a, opt_b, opt_c, opt_d]` (quaternion `w, x, y, z`).
+All of these live in `identibench.datasets.orientation` and are grouped in the
+`idb.orientation_benchmarks` registry. Inputs are
+`u_cols = [acc_x, acc_y, acc_z, gyr_x, gyr_y, gyr_z, dt]` (acc m/s², gyr rad/s,
+`dt` the per-sample sampling interval in seconds; the dfjimu benchmarks omit
+`dt`) and the target is `y_cols = [q_w, q_x, q_y, q_z]` (quaternion `w, x, y, z`).
 
 ```python
 import numpy as np
@@ -184,8 +187,7 @@ print(result["custom_scores"])         # faithful masked RMSE + 99th pct, per so
 > *unmasked* inclination RMSE. RIANN's published numbers are the *masked* RMSE
 > and its 99th percentile, per dataset — these live in `custom_scores`
 > (`<source>/incl_rmse_deg`, `<source>/incl_p99_deg`, and pooled `all/…`),
-> surfaced as `cs_*` columns by `benchmark_results_to_dataframe`. See
-> `RIANN_INTEGRATION.md` for the full design.
+> surfaced as `cs_*` columns by `benchmark_results_to_dataframe`.
 
 ## Prediction Benchmarks
 

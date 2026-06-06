@@ -229,24 +229,24 @@ class TestDlWienerHammerstein:
 
 
 # ---------------------------------------------------------------------------
-# 4. dl_imu tests (mocked)
+# 4. dl_dfjimu tests (mocked)
 # ---------------------------------------------------------------------------
 
 
-class TestDlImu:
-    """Tests for IMU download and HDF5 conversion with mocked HTTP + scipy."""
+class TestDlDfjimu:
+    """Tests for dfjimu download and HDF5 conversion with mocked HTTP + scipy."""
 
-    def test_dl_imu_creates_flat_hdf5(self, tmp_path):
-        from identibench.datasets.imu import (
-            dl_imu,
+    def test_dl_dfjimu_creates_flat_hdf5(self, tmp_path):
+        from identibench.datasets.orientation.dfjimu import (
+            dl_dfjimu,
             ALL_HDF5_FILES,
             ALL_HDF5_FILES_PERSENSOR,
-            imu_u_cols,
-            imu_y_q1_cols,
-            imu_y_q2_cols,
-            imu_y_rel_cols,
-            imu_u_generic,
-            imu_y_q_generic,
+            dfjimu_u_cols,
+            dfjimu_y_q1_cols,
+            dfjimu_y_q2_cols,
+            dfjimu_y_rel_cols,
+            dfjimu_u_generic,
+            dfjimu_y_q_generic,
         )
 
         mock_data = MagicMock()
@@ -260,19 +260,19 @@ class TestDlImu:
         mock_response.content = b"fake"
         mock_response.raise_for_status = MagicMock()
 
-        with patch("identibench.datasets.imu.requests.get", return_value=mock_response):
-            with patch("identibench.datasets.imu.scipy.io.loadmat", return_value={"data": mock_data}):
-                save_path = tmp_path / "imu"
-                dl_imu(save_path, force_download=True)
+        with patch("identibench.datasets.orientation.dfjimu.requests.get", return_value=mock_response):
+            with patch("identibench.datasets.orientation.dfjimu.scipy.io.loadmat", return_value={"data": mock_data}):
+                save_path = tmp_path / "dfjimu"
+                dl_dfjimu(save_path, force_download=True)
 
         for fname in ALL_HDF5_FILES:
             fpath = save_path / fname
             assert fpath.exists(), f"{fname} not created"
 
             with h5py.File(fpath, "r") as f:
-                for col in imu_u_cols:
+                for col in dfjimu_u_cols:
                     assert col in f, f"{col} missing in {fname}"
-                for col in imu_y_q1_cols + imu_y_q2_cols + imu_y_rel_cols:
+                for col in dfjimu_y_q1_cols + dfjimu_y_q2_cols + dfjimu_y_rel_cols:
                     assert col in f, f"{col} missing in {fname}"
                 assert f.attrs["fs"] == 50.0
                 assert "r_12" in f.attrs
@@ -283,22 +283,22 @@ class TestDlImu:
             assert fpath.exists(), f"virtual {fname} not created"
 
             with h5py.File(fpath, "r") as f:
-                for col in imu_u_generic + imu_y_q_generic:
+                for col in dfjimu_u_generic + dfjimu_y_q_generic:
                     assert col in f, f"{col} missing in virtual {fname}"
                     assert f[col].shape == (100,)
                 assert f.attrs["fs"] == 50.0
 
-    def test_dl_imu_skips_existing(self, tmp_path):
+    def test_dl_dfjimu_skips_existing(self, tmp_path):
         """When all HDF5 files exist and force_download=False, no download occurs."""
-        from identibench.datasets.imu import dl_imu, ALL_HDF5_FILES, ALL_HDF5_FILES_PERSENSOR
+        from identibench.datasets.orientation.dfjimu import dl_dfjimu, ALL_HDF5_FILES, ALL_HDF5_FILES_PERSENSOR
 
-        save_path = tmp_path / "imu"
+        save_path = tmp_path / "dfjimu"
         save_path.mkdir()
         for fname in ALL_HDF5_FILES + ALL_HDF5_FILES_PERSENSOR:
             (save_path / fname).touch()
 
-        with patch("identibench.datasets.imu.requests.get") as mock_get:
-            dl_imu(save_path, force_download=False)
+        with patch("identibench.datasets.orientation.dfjimu.requests.get") as mock_get:
+            dl_dfjimu(save_path, force_download=False)
             mock_get.assert_not_called()
 
 
@@ -363,54 +363,54 @@ class TestSlowIntegration:
         assert result["training_time_seconds"] >= 0
         assert result["test_time_seconds"] >= 0
 
-    def test_dl_imu_integration(self, tmp_path):
-        """Download real IMU data and verify HDF5 + virtual files."""
-        from identibench.datasets.imu import (
-            dl_imu,
+    def test_dl_dfjimu_integration(self, tmp_path):
+        """Download real dfjimu data and verify HDF5 + virtual files."""
+        from identibench.datasets.orientation.dfjimu import (
+            dl_dfjimu,
             ALL_HDF5_FILES,
             ALL_HDF5_FILES_PERSENSOR,
-            imu_u_cols,
-            imu_u_generic,
-            imu_y_q_generic,
+            dfjimu_u_cols,
+            dfjimu_u_generic,
+            dfjimu_y_q_generic,
         )
 
-        dl_imu(tmp_path, force_download=False)
+        dl_dfjimu(tmp_path, force_download=False)
 
         for fname in ALL_HDF5_FILES:
             fpath = tmp_path / fname
             assert fpath.exists(), f"{fname} not created"
             with h5py.File(fpath, "r") as f:
-                for col in imu_u_cols:
+                for col in dfjimu_u_cols:
                     assert col in f
 
         for fname in ALL_HDF5_FILES_PERSENSOR:
             fpath = tmp_path / fname
             assert fpath.exists(), f"virtual {fname} not created"
             with h5py.File(fpath, "r") as f:
-                for col in imu_u_generic + imu_y_q_generic:
+                for col in dfjimu_u_generic + dfjimu_y_q_generic:
                     assert col in f
                     assert f[col][()].dtype == np.float32
 
-    def test_run_benchmark_imu_inclination(self, tmp_path):
-        """Full end-to-end: download + run BenchmarkIMU_Inclination with a dummy model."""
+    def test_run_benchmark_dfjimu_inclination(self, tmp_path):
+        """Full end-to-end: download + run BenchmarkDFJIMU_Inclination with a dummy model."""
         from identibench.benchmark import run_benchmark
-        from identibench.datasets.imu import (
-            BenchmarkIMU_Inclination,
-            dl_imu,
-            imu_u_generic,
-            imu_y_q_generic,
+        from identibench.datasets.orientation.dfjimu import (
+            BenchmarkDFJIMU_Inclination,
+            dl_dfjimu,
+            dfjimu_u_generic,
+            dfjimu_y_q_generic,
         )
 
         spec = BenchmarkSpecSimulation(
-            name="test_imu_inclination",
-            dataset_id="imu",
-            u_cols=imu_u_generic,
-            y_cols=imu_y_q_generic,
-            metric_func=BenchmarkIMU_Inclination.metric_func,
-            download_func=dl_imu,
+            name="test_dfjimu_inclination",
+            dataset_id="dfjimu",
+            u_cols=dfjimu_u_generic,
+            y_cols=dfjimu_y_q_generic,
+            metric_func=BenchmarkDFJIMU_Inclination.metric_func,
+            download_func=dl_dfjimu,
             sampling_time=1.0 / 50.0,
             init_window=0,
-            split=BenchmarkIMU_Inclination.split,
+            split=BenchmarkDFJIMU_Inclination.split,
             data_root=tmp_path,
         )
 
@@ -424,7 +424,7 @@ class TestSlowIntegration:
             return model
 
         result = run_benchmark(spec, build_model)
-        assert result["benchmark_name"] == "test_imu_inclination"
+        assert result["benchmark_name"] == "test_dfjimu_inclination"
         assert np.isfinite(result["metric_score"])
         assert result["training_time_seconds"] >= 0
         assert result["test_time_seconds"] >= 0
