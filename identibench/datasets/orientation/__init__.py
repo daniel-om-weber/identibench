@@ -10,27 +10,27 @@ one home:
   benchmarks.
 * **RIANN** (:mod:`~identibench.datasets.orientation.riann`) — six general IMU
   orientation datasets (BROAD, TUM-VI, OxIOD, EuRoC-MAV, RepoIMU, Caruso-Sassari)
-  plus the combined ``riann`` corpus reproducing the paper's pooled-train /
-  cross-dataset-test protocol.
+  plus the combined RIANN benchmark reproducing the paper's pooled-train /
+  cross-dataset-test protocol over those six datasets via explicit file patterns.
 
 Quaternion target columns are ``q_w, q_x, q_y, q_z`` across all datasets; the
 download/conversion helpers live in the private :mod:`._common` module.
 """
 
+from ._common import MaskedPooledInclination
 from .dfjimu import (
+    dfjimu_dataset,
     dl_dfjimu,
     BenchmarkDFJIMU_Inclination,
     BenchmarkDFJIMU_Relative,
 )
-from .broad import dl_broad, BenchmarkBROAD_Inclination
-from .tumvi import dl_tumvi, BenchmarkTUMVI_Inclination
-from .oxiod import dl_oxiod, BenchmarkOxIOD_Inclination
-from .euroc import dl_euroc, BenchmarkEuRoC_Inclination
-from .repoimu import dl_repoimu, BenchmarkRepoIMU_Inclination
-from .caruso import dl_caruso, BenchmarkCaruso_Inclination
+from .broad import broad_dataset, dl_broad, BenchmarkBROAD_Inclination
+from .tumvi import tumvi_dataset, dl_tumvi, BenchmarkTUMVI_Inclination
+from .oxiod import oxiod_dataset, dl_oxiod, BenchmarkOxIOD_Inclination
+from .euroc import euroc_dataset, dl_euroc, BenchmarkEuRoC_Inclination
+from .repoimu import repoimu_dataset, dl_repoimu, BenchmarkRepoIMU_Inclination
+from .caruso import caruso_dataset, dl_caruso, BenchmarkCaruso_Inclination
 from .riann import (
-    dl_riann,
-    riann_eval,
     riann_benchmarks,
     BenchmarkRIANN_Inclination,
 )
@@ -49,17 +49,23 @@ orientation_benchmarks = {
 }
 
 __all__ = [
+    "dfjimu_dataset",
+    "broad_dataset",
+    "tumvi_dataset",
+    "oxiod_dataset",
+    "euroc_dataset",
+    "repoimu_dataset",
+    "caruso_dataset",
     "dl_dfjimu",
     "BenchmarkDFJIMU_Inclination",
     "BenchmarkDFJIMU_Relative",
-    "dl_riann",
     "dl_broad",
     "dl_tumvi",
     "dl_oxiod",
     "dl_euroc",
     "dl_repoimu",
     "dl_caruso",
-    "riann_eval",
+    "MaskedPooledInclination",
     "riann_benchmarks",
     "BenchmarkRIANN_Inclination",
     "BenchmarkBROAD_Inclination",

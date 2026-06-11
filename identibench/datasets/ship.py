@@ -1,10 +1,11 @@
 """Ship dynamics benchmark dataset definition."""
 
-__all__ = ["ship_u", "ship_y", "BenchmarkShip_Simulation", "BenchmarkShip_Prediction", "dl_ship"]
+__all__ = ["ship_dataset", "ship_u", "ship_y", "BenchmarkShip_Simulation", "BenchmarkShip_Prediction", "dl_ship"]
 
 from nonlinear_benchmarks.utilities import get_tmp_benchmark_directory
 import identibench.metrics
-from ._common import make_sim_pred
+from ..benchmark import BenchmarkSpec, Prediction, Simulation
+from ..dataset import Dataset
 from pathlib import Path
 import os
 import h5py
@@ -81,17 +82,32 @@ def dl_ship(
         shutil.rmtree(download_dir)
 
 
+ship_dataset = Dataset("ship", prepare=dl_ship)
+
 ship_u = ["n", "deltal", "deltar", "Vw"]
 ship_y = ["alpha_x", "alpha_y", "u", "v", "p", "r", "phi"]
 
-BenchmarkShip_Simulation, BenchmarkShip_Prediction = make_sim_pred(
-    name_base="BenchmarkShip",
-    dataset_id="ship",
+_ship = dict(
     u_cols=ship_u,
     y_cols=ship_y,
-    metric_func=identibench.metrics.rmse,
-    download_func=dl_ship,
-    init_window=100,
-    pred_horizon=100,
-    pred_step=100,
+    train=[(ship_dataset, "train/*.hdf5")],
+    valid=[(ship_dataset, "valid/*.hdf5")],
+    # Routine-condition test set is the headline; the out-of-distribution
+    # patrol_ship_ood recordings are the named set "ood".
+    test_sets={
+        "test": [(ship_dataset, "test/*.hdf5")],
+        "ood": [(ship_dataset, "test_ood/*.hdf5")],
+    },
+)
+
+BenchmarkShip_Simulation = BenchmarkSpec(
+    name="BenchmarkShip_Simulation",
+    task=Simulation(metric=identibench.metrics.rmse, init_window=100),
+    **_ship,
+)
+
+BenchmarkShip_Prediction = BenchmarkSpec(
+    name="BenchmarkShip_Prediction",
+    task=Prediction(horizon=100, step=100, metric=identibench.metrics.rmse, init_window=100),
+    **_ship,
 )

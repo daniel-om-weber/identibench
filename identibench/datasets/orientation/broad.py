@@ -1,7 +1,7 @@
-"""BROAD dataset → data/Myon/ (39 trials).
+"""BROAD dataset (39 Myon trials).
 
 Source: https://github.com/dlaidig/broad
-Output: data/Myon/{NN_description}.hdf5  (39 files)
+Output: broad/{NN_description}.hdf5  (39 files, flat)
 
 The BROAD .mat files are numbered 01-39 but the mapping to Myon output files
 is NOT 1:1 — two BROAD trials are re-ordered:
@@ -18,11 +18,13 @@ from pathlib import Path
 import numpy as np
 from scipy.io import loadmat
 
-from ._common import _prepare, _spec, _test_role, download_file, extract_archive, fix_quaternion_flips, write_hdf5
+from identibench.dataset import Dataset
+from identibench.utils import download_file, extract_archive
+
+from ._common import _prepare_sources, _spec, fix_quaternion_flips, write_hdf5
 
 _REPO_ZIP = "https://github.com/dlaidig/broad/archive/refs/heads/main.zip"
 _RAW_DIR = "broad"  # cache sub-directory under raw_dir for downloads + extraction
-SOURCE_DIR = "Myon"  # sub-directory convert() writes into / routing key
 
 # Known Myon output filenames keyed by trial number (01-39).
 MYON_NAMES = {
@@ -75,7 +77,7 @@ def download(raw_dir: Path, force: bool = False) -> None:
 
 def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / _RAW_DIR
-    out_dir = out_dir / SOURCE_DIR
+    out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     zip_path = raw_dir / "broad-main.zip"
@@ -119,8 +121,10 @@ def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
 
 
 def dl_broad(save_path, force_download: bool = False) -> None:
-    """Download + convert BROAD into ``save_path/test/`` (all files are test)."""
-    _prepare(save_path, [(download, convert, SOURCE_DIR)], _test_role, force_download=force_download)
+    """Download + convert BROAD flat into ``save_path``."""
+    _prepare_sources(save_path, [(download, convert)], force_download=force_download)
 
 
-BenchmarkBROAD_Inclination = _spec("BenchmarkBROAD_Inclination", "broad", dl_broad)
+broad_dataset = Dataset("broad", prepare=dl_broad)
+
+BenchmarkBROAD_Inclination = _spec("BenchmarkBROAD_Inclination", broad_dataset)

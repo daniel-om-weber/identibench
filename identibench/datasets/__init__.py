@@ -1,54 +1,71 @@
-from pathlib import Path
-from .workshop import dl_wiener_hammerstein, dl_silverbox, dl_cascaded_tanks, dl_emps, dl_noisy_wh, dl_ced
-from .industrial_robot import dl_robot_forward, dl_robot_inverse
-from .ship import dl_ship
-from .quad_pelican import dl_quad_pelican
-from .quad_pi import dl_quad_pi
+"""Dataset registry: every Dataset identibench can download and prepare."""
+
+from .workshop import (
+    wh_dataset,
+    silverbox_dataset,
+    cascaded_tanks_dataset,
+    emps_dataset,
+    noisy_wh_dataset,
+    ced_dataset,
+)
+from .industrial_robot import robot_forward_dataset, robot_inverse_dataset
+from .ship import ship_dataset
+from .quad_pelican import quad_pelican_dataset
+from .quad_pi import quad_pi_dataset
 from .orientation import (
-    dl_dfjimu,
-    dl_riann,
-    dl_broad,
-    dl_tumvi,
-    dl_oxiod,
-    dl_euroc,
-    dl_repoimu,
-    dl_caruso,
+    dfjimu_dataset,
+    broad_dataset,
+    tumvi_dataset,
+    oxiod_dataset,
+    euroc_dataset,
+    repoimu_dataset,
+    caruso_dataset,
+)
+from .ias import (
+    ball_bearing_dataset,
+    parallel_gearbox_dataset,
+    planetary_gearbox_dataset,
+    gas_foil_bearing_dataset,
 )
 
-all_dataset_loaders = {
-    "wh": dl_wiener_hammerstein,
-    "silverbox": dl_silverbox,
-    "cascaded_tanks": dl_cascaded_tanks,
-    "emps": dl_emps,
-    "noisy_wh": dl_noisy_wh,
-    "robot_forward": dl_robot_forward,
-    "robot_inverse": dl_robot_inverse,
-    "ship": dl_ship,
-    "quad_pelican": dl_quad_pelican,
-    "quad_pi": dl_quad_pi,
-    "broad": dl_broad,
-    "ced": dl_ced,
-    "dfjimu": dl_dfjimu,
-    "riann": dl_riann,
-    "tumvi": dl_tumvi,
-    "oxiod": dl_oxiod,
-    "euroc": dl_euroc,
-    "repoimu": dl_repoimu,
-    "caruso": dl_caruso,
+all_datasets = {
+    ds.dataset_id: ds
+    for ds in [
+        wh_dataset,
+        silverbox_dataset,
+        cascaded_tanks_dataset,
+        emps_dataset,
+        noisy_wh_dataset,
+        ced_dataset,
+        robot_forward_dataset,
+        robot_inverse_dataset,
+        ship_dataset,
+        quad_pelican_dataset,
+        quad_pi_dataset,
+        dfjimu_dataset,
+        broad_dataset,
+        tumvi_dataset,
+        oxiod_dataset,
+        euroc_dataset,
+        repoimu_dataset,
+        caruso_dataset,
+        ball_bearing_dataset,
+        parallel_gearbox_dataset,
+        planetary_gearbox_dataset,
+        gas_foil_bearing_dataset,
+    ]
 }
 
 
-def download_all_datasets(save_path: Path, force_download: bool = False):
-    """Download all datasets provided by identibench.datasets into subdirectories."""
-    save_path = Path(save_path)
-    print(f"Downloading all datasets to {save_path}...")
-    for name, loader in all_dataset_loaders.items():
-        print(f"--- Downloading/Preparing {name} ---")
+def download_all_datasets(force: bool = False):
+    """Prepare every registered dataset under the data root (IDENTIBENCH_DATA_ROOT)."""
+    for name, ds in all_datasets.items():
+        print(f"--- Preparing {name} ---")
         try:
-            loader(save_path / name, force_download=force_download)
+            ds.ensure_exists(force=force)
         except Exception as e:
-            print(f"ERROR downloading {name}: {e}")
-    print("--- Finished downloading all datasets ---")
+            print(f"ERROR preparing {name}: {e}")
+    print("--- Finished preparing all datasets ---")
 
 
-__all__ = ["all_dataset_loaders", "download_all_datasets"]
+__all__ = ["all_datasets", "download_all_datasets"]

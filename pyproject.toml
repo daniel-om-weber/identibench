@@ -34,7 +34,8 @@ dependencies = [
 [project.optional-dependencies]
 ship = ["easyDataverse>=0.4.4"]
 quad = ["bagpy", "gdown"]
-all = ["easyDataverse>=0.4.4", "bagpy", "gdown"]
+ias = ["scikit-learn"]
+all = ["easyDataverse>=0.4.4", "bagpy", "gdown", "scikit-learn"]
 dev = [
     "pytest",
     "pytest-cov",

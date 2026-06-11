@@ -65,7 +65,12 @@ def _run(spec, data_root, monkeypatch):
     assert np.isfinite(result["metric_score"]), f"{spec.name}: non-finite metric_score"
     assert result["training_time_seconds"] >= 0
     assert result["test_time_seconds"] >= 0
-    assert result["model_predictions"], f"{spec.name}: no predictions produced"
+    assert result["benchmark_type"] in ("Simulation", "Prediction", "MaskedPooledInclination", "WindowedEstimation")
+    assert result["test_sets"], f"{spec.name}: no test sets scored"
+    assert result["metric_name"], f"{spec.name}: no headline metric reported"
+    for set_name, metric_scores in result["test_sets"].items():
+        for metric_name, value in metric_scores.items():
+            assert np.isfinite(value), f"{spec.name}: non-finite {set_name}/{metric_name}"
 
 
 @pytest.mark.slow

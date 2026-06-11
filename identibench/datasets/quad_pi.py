@@ -1,6 +1,7 @@
 """Quadrotor Pi benchmark dataset definition."""
 
 __all__ = [
+    "quad_pi_dataset",
     "quad_pi_u",
     "quad_pi_x_v",
     "quad_pi_x_q",
@@ -16,7 +17,8 @@ __all__ = [
 
 from nonlinear_benchmarks.utilities import get_tmp_benchmark_directory
 import identibench.metrics
-from ._common import make_sim_pred
+from ..benchmark import BenchmarkSpec, Prediction, Simulation
+from ..dataset import Dataset
 from pathlib import Path
 import os
 import h5py
@@ -363,14 +365,24 @@ quad_pi_y_wdot = ["wdot_x", "wdot_y", "wdot_z"]
 quad_pi_y = quad_pi_y_vdot + quad_pi_y_wdot
 
 
-BenchmarkQuadPi_Simulation, BenchmarkQuadPi_Prediction = make_sim_pred(
-    name_base="BenchmarkQuadPi",
-    dataset_id="quad_pi",
+quad_pi_dataset = Dataset("quad_pi", prepare=dl_quad_pi)
+
+_quad_pi = dict(
     u_cols=quad_pi_u,
     y_cols=quad_pi_y,
-    metric_func=identibench.metrics.rmse,
-    download_func=dl_quad_pi,
-    init_window=100,
-    pred_horizon=100,
-    pred_step=100,
+    train=[(quad_pi_dataset, "train/*.hdf5")],
+    valid=[(quad_pi_dataset, "valid/*.hdf5")],
+    test_sets={"test": [(quad_pi_dataset, "test/*.hdf5")]},
+)
+
+BenchmarkQuadPi_Simulation = BenchmarkSpec(
+    name="BenchmarkQuadPi_Simulation",
+    task=Simulation(metric=identibench.metrics.rmse, init_window=100),
+    **_quad_pi,
+)
+
+BenchmarkQuadPi_Prediction = BenchmarkSpec(
+    name="BenchmarkQuadPi_Prediction",
+    task=Prediction(horizon=100, step=100, metric=identibench.metrics.rmse, init_window=100),
+    **_quad_pi,
 )

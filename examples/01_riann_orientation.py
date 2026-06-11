@@ -107,29 +107,31 @@ def build_model(context):
 #
 # `BenchmarkBROAD_Inclination` is a single source — a good first target.
 # (`BenchmarkEuRoC_Inclination` is an equally good, lighter-weight alternative;
-# pick whichever source you like — the interface is the same.) The headline metric is the
-# **first-sample-aligned inclination RMSE**: before scoring, the estimate is
-# rotated to match ground truth at the first sample (removing the fixed offset
-# between the IMU's gravity frame and the optical reference frame), then the tilt
-# error is measured over the whole sequence.
+# pick whichever source you like — the interface is the same.) The headline metric
+# is the **faithful RIANN number**: the first-sample-aligned inclination error
+# (the estimate is rotated to match ground truth at the first sample, removing
+# the fixed offset between the IMU's gravity frame and the optical reference
+# frame), restricted to *moving* segments via each file's `movement_mask`,
+# sample-pooled across all sources, and reported as an RMSE.
 
 # %%
 result = idb.run_benchmark(idb.BenchmarkBROAD_Inclination, build_model)
 
 print(f"metric ({result['metric_name']}): {result['metric_score']:.3f} deg")
-print("(first-sample aligned, unmasked)")
+print("(first-sample aligned, masked, sample-pooled)")
 
 # %% [markdown]
-# ## Faithful per-source scores
+# ## Per-source scores
 #
-# The headline number above is convenient but lenient. `custom_scores` carries
-# the **faithful RIANN evaluation**: the inclination error is restricted to
-# *moving* segments (via each file's `movement_mask`) and reported both as an
-# RMSE and as a 99th-percentile worst case, broken down per source dataset.
+# `result["test_sets"]` carries the per-source breakdown: each named test set
+# (= source dataset) is scored as one sample pool with the masked inclination
+# RMSE and its 99th-percentile worst case, plus the pooled `"all"` set that is
+# the headline.
 
 # %%
-for key, val in sorted(result["custom_scores"].items()):
-    print(f"  {key:32s} {val:7.3f} deg")
+for set_name, metric_scores in sorted(result["test_sets"].items()):
+    for metric_name, val in sorted(metric_scores.items()):
+        print(f"  {set_name + '/' + metric_name:40s} {val:7.3f} deg")
 
 # %% [markdown]
 # ## Visualizing the drift
@@ -138,15 +140,18 @@ for key, val in sorted(result["custom_scores"].items()):
 # trait is that error grows roughly monotonically as small mistakes accumulate —
 # so let's plot the per-sample tilt error along the first test sequence.
 #
-# `result["model_predictions"]` holds one `(y_pred, y_true)` quaternion pair per
-# test sequence. `identibench.metrics._aligned_inclination_rad` returns the same
-# per-sample tilt error (in radians) that the headline RMSE aggregates — using it
-# here keeps the plot consistent with the reported number.
+# The result dict carries only scalar scores, so we run the model over the first
+# test sequence ourselves. `identibench.metrics._aligned_inclination_rad` returns
+# the same per-sample tilt error (in radians) that the headline RMSE aggregates —
+# using it here keeps the plot consistent with the reported number.
 
 # %%
 from identibench.metrics import _aligned_inclination_rad
 
-y_pred, y_true = result["model_predictions"][0]
+context = idb.TrainingContext(idb.BenchmarkBROAD_Inclination, hyperparameters={}, seed=0)
+seq = next(context.get_test_sequences())
+model = build_model(context)
+y_pred, y_true = model(seq.u, seq.y[:0], seq.attrs), seq.y
 incl_deg = _aligned_inclination_rad(y_pred, y_true) * 180.0 / np.pi
 sample = np.arange(len(incl_deg))
 

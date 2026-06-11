@@ -37,14 +37,14 @@ reproducible evaluation.
   PyTorch, TensorFlow, JAX, etc.), using a straightforward function
   interface (`build_model`) that receives all necessary context.
 - **Capture Comprehensive Results:** Obtain detailed evaluation reports
-  including standard metrics (RMSE, NRMSE, FIT%, etc.), task-specific
-  scores, execution timings, configuration parameters (hyperparameters,
-  seed), and raw model predictions for thorough analysis.
-- **Easily Define New Benchmarks:** Go beyond the included datasets by
-  creating your own benchmark specifications
-  (`BenchmarkSpecSimulation`, `BenchmarkSpecPrediction`)
-  for private data or unique tasks, leveraging the library’s structure
-  and transparent data format.
+  including standard metrics (RMSE, NRMSE, FIT%, etc.), per-test-set
+  scores, execution timings, and configuration parameters
+  (hyperparameters, seed) for thorough analysis.
+- **Easily Define New Benchmarks:** Go beyond the included datasets:
+  point a `Dataset` at a directory of HDF5 files (no manifest, no
+  registration), select files with explicit glob patterns, and pick a
+  `Simulation` or `Prediction` task (or any custom task callable) — a
+  complete benchmark is one `BenchmarkSpec` literal.
 
 ## Installation
 
@@ -169,18 +169,67 @@ results = idb.run_benchmark(
 | `QuadPelican_Sim`  | BenchmarkQuadPelican_Simulation   |
 | `QuadPi_Sim`       | BenchmarkQuadPi_Simulation        |
 
+## IAS (Instantaneous Angular Speed) Benchmarks
+
+Estimate the instantaneous angular speed `IAS` (Hz) of rotating machinery from
+vibration/acceleration channels. All four use the `WindowedEstimation` task: the
+model is applied to **non-overlapping windows** of a per-dataset `window_sec` and
+emits one estimate per window, scored against the window-mean IAS. The per-window
+absolute errors are pooled (micro) into MAE in Hz — the headline `metric_score`
+— with `medae`/`std`/`max` reported alongside. The model is called as
+`model(u_window, y_init, attrs)` with an empty `y_init`, and its per-window output
+is mean-reduced.
+
+This is a single **standardized** protocol that captures the shape of the upstream
+IAS benchmark's windowed evaluation (windowed, window-mean target, pooled MAE in
+Hz). It is *not* a drop-in reproduction of the upstream results table: the
+original scored each model with its own window size (a per-model tuning knob), step
+(overlapping for some models), and target granularity. Fixing one window per
+dataset trades exact reproduction for a fairer apples-to-apples comparison; set
+`window_sec` (a task parameter) to a model's tuned window to align with its upstream
+run.
+
+| Key                          | Benchmark Name                       | Inputs (u)                | `window_sec` |
+|------------------------------|--------------------------------------|---------------------------|--------------|
+| `BallBearing_Estimation`     | BenchmarkBallBearing_Estimation      | `Acc_x`                   | 2.0          |
+| `ParallelGearbox_Estimation` | BenchmarkParallelGearbox_Estimation  | `gearbox_vibration_x/y/z` | 2.2          |
+| `PlanetaryGearbox_Estimation`| BenchmarkPlanetaryGearbox_Estimation | `Acc_Carrier`, `Acc_Sun`  | 2.7          |
+| `GasFoilBearing_Estimation`  | BenchmarkGasFoilBearing_Estimation   | `Acc_x`, `Acc_y`          | 2.5          |
+
+Each `window_sec` is set to the **largest window any upstream method needed** on
+that dataset (~2–2.7 s). This unifies the evaluation across method families: a
+method needing fewer samples can always *crop or decimate* a longer window (the
+FFT/order-tracking methods — FFT nets, MOPA, ViBES — decimate then STFT), but none
+can run on a window that is too short. The largest windows turn out ~uniform in
+time (~0.4 Hz spectral resolution), not in revolutions. Sizing this way means no
+method is starved — e.g. MOPA needs ~2.5 s on the gas-foil bearing, which a
+revolution-based window would have cut to a fraction of that.
+
+Each dataset exposes several named test conditions: `basic` (in-distribution —
+the headline `metric_score`), `wear` (out-of-distribution fault severities;
+absent for the gas foil bearing), and `disturbed_{15,7.5,0}dB` (copies of
+`basic` with reproducible synthetic sensor noise at decreasing SNR). All
+conditions are scored into `result["test_sets"]`.
+
+These live in `identibench.datasets.ias` and the `idb.ias_benchmarks` registry.
+The stratified splits require `scikit-learn`
+(`pip install "identibench[ias]"`); downloads are sizable (the ball bearing
+dataset is recorded at 200 kHz).
+
 ## Orientation (IMU) Benchmarks
 
 Estimate orientation (a unit quaternion) from 6-axis IMU data and score it with
-the inclination (tilt) error in degrees. These are `BenchmarkSpecSimulation`
-tasks — plug in any model via `build_model` (neural network, complementary
+the inclination (tilt) error in degrees. These are free-run estimation
+benchmarks — plug in any model via `build_model` (neural network, complementary
 filter, …).
 
 The **RIANN** benchmarks port the six datasets from
-[Weber et al. 2021](https://doi.org/10.3390/ai2030028). The combined `riann`
-benchmark reproduces the paper's pooled-train / cross-dataset-test protocol; the
-per-source benchmarks let you download and evaluate a single dataset in
-isolation. Each is downloaded from its original public source on first use.
+[Weber et al. 2021](https://doi.org/10.3390/ai2030028). The combined RIANN
+benchmark reproduces the paper's pooled-train / cross-dataset-test protocol as
+explicit file patterns over the six source datasets (stored once — the
+benchmark adds no data of its own); the per-source benchmarks evaluate a single
+dataset in isolation. Each is downloaded from its original public source on
+first use.
 
 | Key                  | Benchmark Name                 | Files (role)            |
 |----------------------|--------------------------------|-------------------------|
@@ -215,15 +264,16 @@ result = idb.run_benchmark(idb.BenchmarkEuRoC_Inclination, build_model)
 
 # ...or reproduce the full RIANN cross-dataset protocol in one run.
 result = idb.run_benchmark(idb.BenchmarkRIANN_Inclination, build_model)
-print(result["metric_score"])          # aligned (unmasked) inclination RMSE, deg
-print(result["custom_scores"])         # faithful masked RMSE + 99th pct, per source
+print(result["metric_score"])          # masked, sample-pooled inclination RMSE over all sources, deg
+print(result["test_sets"])             # masked RMSE + 99th pct, per source + pooled "all"
 ```
 
-> **Which number to report.** `metric_score` is the first-sample-aligned but
-> *unmasked* inclination RMSE. RIANN's published numbers are the *masked* RMSE
-> and its 99th percentile, per dataset — these live in `custom_scores`
-> (`<source>/incl_rmse_deg`, `<source>/incl_p99_deg`, and pooled `all/…`),
-> surfaced as `cs_*` columns by `benchmark_results_to_dataframe`.
+> **Which number to report.** The headline `metric_score` is RIANN's faithful
+> number: the *masked*, first-sample-aligned inclination RMSE, sample-pooled
+> across all sources (the `"all"` test set). The per-source breakdown and the
+> 99th percentiles live in `result["test_sets"]`
+> (`{<source>: {incl_rmse_deg, incl_p99_deg}, "all": …}`), surfaced as
+> `test_sets.<source>.<metric>` columns by `benchmark_results_to_dataframe`.
 
 ## Prediction Benchmarks
 
@@ -248,11 +298,13 @@ the `identibench` workflow.
 
 ### Benchmark Types
 
-`identibench` defines two main types of benchmark tasks, specified using
-different classes:
+Every benchmark is a single `BenchmarkSpec` (identity + data binding) carrying a
+**task** — a callable that owns the whole evaluation, including its metric. The
+library ships two built-in tasks; their parameters are readable from code
+(`spec.task.init_window`, `spec.task.horizon`, … or generically via
+`dataclasses.asdict(spec.task)`):
 
-- **Simulation
-  (`BenchmarkSpecSimulation`)**:
+- **Simulation (`Simulation(metric=..., init_window=...)`)**:
   - **Goal:** Evaluate a model’s ability to perform a free-run
     simulation, predicting the system’s output over an extended period
     given the input sequence.
@@ -264,24 +316,38 @@ different classes:
     period.
   - **Use Case:** Assessing models intended for long-term prediction,
     control simulation, or understanding overall system dynamics.
-- **Prediction
-  (`BenchmarkSpecPrediction`)**:
+- **Prediction (`Prediction(horizon=..., step=..., metric=..., init_window=...)`)**:
   - **Goal:** Evaluate a model’s ability to predict the system’s output
     *k* steps into the future based on recent past data.
-  - **Typical Input to Predictor:** Often involves windows of past
-    inputs and outputs (e.g., `u[t:t+H]`, `y[t:t+H]`).
-  - **Expected Output from Predictor:** The predicted output at a
-    specific future time step (e.g., `y[t+H+k]`). The `pred_horizon`
-    parameter defines ‘k’, and `pred_step` defines how frequently
-    predictions are made.
+  - **Typical Input to Predictor:** Sliding windows of past inputs and
+    outputs (e.g., `u[t:t+H]`, `y[t:t+H]`).
+  - **Expected Output from Predictor:** The predicted output over the
+    window. The `horizon` parameter defines ‘k’, and `step` defines how
+    frequently prediction windows start.
   - **Use Case:** Evaluating models focused on short-to-medium term
     forecasting, state estimation, or receding horizon control.
-- **`init_window`**: Both benchmark types often use an `init_window`.
-  This specifies an initial number of time steps whose data might be
-  provided to the model for initialization or warm-up. Importantly, data
-  within this window is typically *excluded* from the final performance
-  metric calculation to ensure a fair evaluation of the model’s
-  predictive capabilities beyond the initial transient.
+- **`init_window`**: Both built-in tasks carry an `init_window`. This
+  specifies an initial number of time steps whose data might be provided
+  to the model for initialization or warm-up. Importantly, data within
+  this window is *excluded* from the final performance metric calculation
+  to ensure a fair evaluation of the model’s predictive capabilities
+  beyond the initial transient. `init_window=0` is a valid free-run
+  setting — the model then receives an *empty* `y_init`.
+- **Custom tasks**: A task is any callable
+  `(spec, model) -> EvalResult`. The `EvalResult` carries the full
+  `{test_set: {metric: value}}` scores, an explicit
+  `headline=(set, metric)` pair naming the leaderboard cell, and optional
+  non-scalar `diagnostics` — so novel evaluations are defined without
+  touching the library, e.g. the orientation benchmarks’
+  `MaskedPooledInclination` task.
+- **Named test sets**: Every spec names its test sets explicitly in
+  `spec.test_sets`, each with its own file patterns (e.g. Silverbox’s
+  `multisine` / `arrow_full` / `arrow_no_extrapolation` are three
+  explicit files, Ship’s `ood` is the `test_ood/` directory). All named
+  sets are scored into `result["test_sets"]`; the built-in tasks
+  headline the first named set, and a task that pools across sets (the
+  orientation benchmarks’ cross-set `"all"`) names its own pool in its
+  `EvalResult.headline`.
 
 ### Model Interface (`build_model`)
 
@@ -295,8 +361,9 @@ you provide to `run_benchmark`.
   receives a single argument, `context`, which is a `TrainingContext`
   object. This object gives you access to:
   - `context.spec`: The full specification of the current benchmark
-    being run (including dataset paths, input/output columns,
-    `init_window`, etc.).
+    being run (dataset path, input/output columns, …). Evaluation
+    parameters live on the task: `context.spec.task.init_window`,
+    `context.spec.task.horizon`, etc.
   - `context.hyperparameters`: A dictionary containing any
     hyperparameters you passed to `run_benchmark`. Use this to configure
     your model or training process.
@@ -313,8 +380,9 @@ you provide to `run_benchmark`.
   predicted output as a NumPy array of shape `(len(u), len(y_cols))`:
   - `u`: the input sequence to predict over — the full test signal for a
     simulation benchmark, or a single window for a prediction benchmark.
-  - `y_init`: the first `init_window` ground-truth output samples, provided
-    for warm-up / state initialization.
+  - `y_init`: the first `task.init_window` ground-truth output samples,
+    provided for warm-up / state initialization (empty when
+    `init_window=0`).
   - `attrs`: a dict of the test file's HDF5 attributes (e.g. the sampling
     rate `fs`).
 
@@ -380,14 +448,14 @@ all_results
     }
 </style>
 
-|  | benchmark_name | dataset_id | hyperparameters | seed | training_time_seconds | test_time_seconds | benchmark_type | metric_name | metric_score | cs_multisine_rmse | cs_arrow_full_rmse | cs_arrow_no_extrapolation_rmse |
-|----|----|----|----|----|----|----|----|----|----|----|----|----|
-| 0 | BenchmarkWH_Simulation | wh | {} | 2406651230 | 4.944649 | 1.012850 | BenchmarkSpecSimulation | rmse_mV | 42.161572 | NaN | NaN | NaN |
-| 1 | BenchmarkSilverbox_Simulation | silverbox | {} | 3813113752 | 2.839149 | 1.246224 | BenchmarkSpecSimulation | rmse_mV | 10.732386 | 8.501941 | 16.154317 | 7.5409 |
-| 2 | BenchmarkWH_Simulation | wh | {} | 1950649438 | 4.801520 | 1.034119 | BenchmarkSpecSimulation | rmse_mV | 42.161572 | NaN | NaN | NaN |
-| 3 | BenchmarkSilverbox_Simulation | silverbox | {} | 1560698088 | 2.880391 | 1.217932 | BenchmarkSpecSimulation | rmse_mV | 10.732386 | 8.501941 | 16.154317 | 7.5409 |
-| 4 | BenchmarkWH_Simulation | wh | {} | 3258007268 | 4.916941 | 1.021927 | BenchmarkSpecSimulation | rmse_mV | 42.161572 | NaN | NaN | NaN |
-| 5 | BenchmarkSilverbox_Simulation | silverbox | {} | 4194043971 | 2.937101 | 1.231710 | BenchmarkSpecSimulation | rmse_mV | 10.732386 | 8.501941 | 16.154317 | 7.5409 |
+|  | benchmark_name | datasets | hyperparameters | seed | training_time_seconds | test_time_seconds | benchmark_type | metric_name | metric_score | test_sets.test.rmse_mV | test_sets.multisine.rmse_mV | test_sets.arrow_full.rmse_mV | test_sets.arrow_no_extrapolation.rmse_mV |
+|----|----|----|----|----|----|----|----|----|----|----|----|----|----|
+| 0 | BenchmarkWH_Simulation | [wh] | {} | 2406651230 | 4.944649 | 1.012850 | Simulation | rmse_mV | 42.161572 | 42.161572 | NaN | NaN | NaN |
+| 1 | BenchmarkSilverbox_Simulation | [silverbox] | {} | 3813113752 | 2.839149 | 1.246224 | Simulation | rmse_mV | 8.501941 | NaN | 8.501941 | 16.154317 | 7.5409 |
+| 2 | BenchmarkWH_Simulation | [wh] | {} | 1950649438 | 4.801520 | 1.034119 | Simulation | rmse_mV | 42.161572 | 42.161572 | NaN | NaN | NaN |
+| 3 | BenchmarkSilverbox_Simulation | [silverbox] | {} | 1560698088 | 2.880391 | 1.217932 | Simulation | rmse_mV | 8.501941 | NaN | 8.501941 | 16.154317 | 7.5409 |
+| 4 | BenchmarkWH_Simulation | [wh] | {} | 3258007268 | 4.916941 | 1.021927 | Simulation | rmse_mV | 42.161572 | 42.161572 | NaN | NaN | NaN |
+| 5 | BenchmarkSilverbox_Simulation | [silverbox] | {} | 4194043971 | 2.937101 | 1.231710 | Simulation | rmse_mV | 8.501941 | NaN | 8.501941 | 16.154317 | 7.5409 |
 
 </div>
 
@@ -415,11 +483,11 @@ idb.aggregate_benchmark_results(all_results,agg_funcs=['mean','std'])
     }
 </style>
 
-|  | training_time_seconds |  | test_time_seconds |  | metric_score |  | cs_multisine_rmse |  | cs_arrow_full_rmse |  | cs_arrow_no_extrapolation_rmse |  |
+|  | training_time_seconds |  | test_time_seconds |  | metric_score |  | test_sets.multisine.rmse_mV |  | test_sets.arrow_full.rmse_mV |  | test_sets.arrow_no_extrapolation.rmse_mV |  |
 |----|----|----|----|----|----|----|----|----|----|----|----|----|
 |  | mean | std | mean | std | mean | std | mean | std | mean | std | mean | std |
 | benchmark_name |  |  |  |  |  |  |  |  |  |  |  |  |
-| BenchmarkSilverbox_Simulation | 2.885547 | 0.049179 | 1.231955 | 0.014147 | 10.732386 | 0.0 | 8.501941 | 0.0 | 16.154317 | 0.0 | 7.5409 | 0.0 |
+| BenchmarkSilverbox_Simulation | 2.885547 | 0.049179 | 1.231955 | 0.014147 | 8.501941 | 0.0 | 8.501941 | 0.0 | 16.154317 | 0.0 | 7.5409 | 0.0 |
 | BenchmarkWH_Simulation | 4.887703 | 0.075912 | 1.022966 | 0.010673 | 42.161572 | 0.0 | NaN | NaN | NaN | NaN | NaN | NaN |
 
 </div>
@@ -429,12 +497,25 @@ idb.aggregate_benchmark_results(all_results,agg_funcs=['mean','std'])
 Understanding how `identibench` organizes and stores data is helpful for
 direct interaction or adding new datasets.
 
+- **Two levels, strictly separated:** A `Dataset` only downloads and
+  prepares files — it carries no roles, splits, or test sets. A
+  `BenchmarkSpec` defines everything else: which files play which role,
+  selected by explicit `(dataset, glob)` patterns. The same files can be
+  split differently by different benchmarks (e.g. the RIANN benchmark
+  draws train/valid/test from six datasets that per-source benchmarks
+  evaluate whole).
 - **Directory Structure:** Datasets are stored under a root directory
   (default: `~/.identibench_data`, configurable via the
-  `IDENTIBENCH_DATA_ROOT` environment variable). The structure follows:
-  `DATA_ROOT / [dataset_id] / [subset] / [experiment_file.hdf5]`.
-- **Subsets:** Standard subset names are `train`, `valid`, and `test`.
-  An optional `train_valid` directory might contain combined data.
+  `IDENTIBENCH_DATA_ROOT` environment variable) as
+  `DATA_ROOT / [dataset_id] / ...` — the layout below the dataset
+  directory is whatever the preparer writes (most use `train/`, `valid/`,
+  `test/` subdirectories; the orientation datasets are flat).
+- **Preparation sentinel:** A successful preparation ends by writing a
+  `.prepared` file containing the dataset’s format version. A directory
+  without a matching sentinel is treated as absent and re-prepared from a
+  clean slate, so an interrupted download can never masquerade as a ready
+  dataset. (To adopt an externally prepared, layout-compatible cache:
+  `echo -n 1 > <dataset_dir>/.prepared`.)
 - **Download & Cache:** Data is downloaded automatically when a
   benchmark requires it and cached locally to avoid re-downloads. The
   `identibench.datasets.download_all_datasets` function can fetch all
@@ -464,7 +545,8 @@ experiment. Key entries include:
 
 - `benchmark_name` (`str`): The unique name of the benchmark
   specification used.
-- `dataset_id` (`str`): Identifier for the dataset source.
+- `datasets` (`list[str]`): The ids of every dataset the spec draws
+  files from.
 - `hyperparameters` (`dict`): The hyperparameters dictionary passed to
   the run.
 - `seed` (`int`): The random seed used for the run.
@@ -472,16 +554,14 @@ experiment. Key entries include:
   `build_model` function.
 - `test_time_seconds` (`float`): Wall-clock time spent evaluating the
   returned predictor on the test set.
-- `benchmark_type` (`str`): The type of benchmark run (e.g.,
-  `'BenchmarkSpecSimulation'`).
-- `metric_name` (`str`): The name of the primary metric function defined
-  in the spec.
-- `metric_score` (`float`): The calculated score for the primary metric
-  on the test set (aggregated if multiple test files).
-- `custom_scores` (`dict`): Any additional scores calculated by custom
-  evaluation logic specific to the benchmark.
-- `model_predictions` (`list`): A list containing the raw outputs. For
-  simulation, it’s typically
-  `[(y_pred_test1, y_true_test1), (y_pred_test2, y_true_test2), ...]`.
-  For prediction, the structure might be nested reflecting windowed
-  predictions.
+- `benchmark_type` (`str`): The name of the task that ran (e.g.,
+  `'Simulation'`, `'Prediction'`, `'MaskedPooledInclination'`).
+- `metric_name` (`str`): The headline metric named by the task.
+- `metric_score` (`float`): The value of the headline `(set, metric)`
+  cell the task names in its `EvalResult.headline`.
+- `test_sets` (`dict`): The full `{test_set: {metric: value}}` scores —
+  every named test set is scored, not just the primary one. Flattened to
+  `test_sets.<set>.<metric>` columns by `benchmark_results_to_dataframe`.
+- `diagnostics` (`dict`): Non-scalar artifacts a task chooses to return
+  (e.g. raw predictions under the reserved key `"predictions"`); empty
+  for the built-in tasks and dropped from the DataFrame.

@@ -1,6 +1,7 @@
 """Quadrotor Pelican benchmark dataset definition."""
 
 __all__ = [
+    "quad_pelican_dataset",
     "pelican_u_motors",
     "pelican_u_motors_cmd",
     "pelican_y_euler",
@@ -17,7 +18,8 @@ __all__ = [
 
 from nonlinear_benchmarks.utilities import cashed_download
 import identibench.metrics
-from ._common import make_sim_pred
+from ..benchmark import BenchmarkSpec, Prediction, Simulation
+from ..dataset import Dataset
 from pathlib import Path
 import os
 import h5py
@@ -159,14 +161,24 @@ pelican_u = pelican_u_motors
 pelican_y = pelican_y_euler_rates + pelican_y_vel
 
 
-BenchmarkQuadPelican_Simulation, BenchmarkQuadPelican_Prediction = make_sim_pred(
-    name_base="BenchmarkQuadPelican",
-    dataset_id="quad_pelican",
+quad_pelican_dataset = Dataset("quad_pelican", prepare=dl_quad_pelican)
+
+_quad_pelican = dict(
     u_cols=pelican_u,
     y_cols=pelican_y,
-    metric_func=identibench.metrics.rmse,
-    download_func=dl_quad_pelican,
-    init_window=100,
-    pred_horizon=100,
-    pred_step=100,
+    train=[(quad_pelican_dataset, "train/*.hdf5")],
+    valid=[(quad_pelican_dataset, "valid/*.hdf5")],
+    test_sets={"test": [(quad_pelican_dataset, "test/*.hdf5")]},
+)
+
+BenchmarkQuadPelican_Simulation = BenchmarkSpec(
+    name="BenchmarkQuadPelican_Simulation",
+    task=Simulation(metric=identibench.metrics.rmse, init_window=100),
+    **_quad_pelican,
+)
+
+BenchmarkQuadPelican_Prediction = BenchmarkSpec(
+    name="BenchmarkQuadPelican_Prediction",
+    task=Prediction(horizon=100, step=100, metric=identibench.metrics.rmse, init_window=100),
+    **_quad_pelican,
 )

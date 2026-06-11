@@ -1,7 +1,7 @@
 """OxIOD dataset — Oxford Inertial Odometry Dataset.
 
 Source: http://deepio.cs.ox.ac.uk/
-Output: data/OxIOD/OxIOD::{category}_data{N}_{M}:fixed.hdf5  (71 files)
+Output: oxiod/OxIOD::{category}_data{N}_{M}:fixed.hdf5  (71 files, flat)
 
 Downloaded from Google Drive (the link revealed after the access form).
 """
@@ -11,12 +11,13 @@ from pathlib import Path
 
 import numpy as np
 
-from ._common import _prepare, _spec, _test_role, extract_archive, fix_quaternion_flips, write_hdf5
+from identibench.dataset import Dataset
+from identibench.utils import extract_archive
+
+from ._common import _prepare_sources, _spec, fix_quaternion_flips, write_hdf5
 
 G = 9.81  # m/s^2
-# OxIOD's raw cache dir and routing key happen to share the same name.
 _RAW_DIR = "OxIOD"  # cache sub-directory under raw_dir for downloads + extraction
-SOURCE_DIR = "OxIOD"  # sub-directory convert() writes into / routing key
 
 # Expected output files derived from existing data directory listing.
 EXPECTED_FILES = [
@@ -159,7 +160,7 @@ def _find_imu_vi_pairs(oxiod_dir: Path) -> list[tuple[str, int, int, Path, Path]
 
 def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / _RAW_DIR
-    out_dir = out_dir / SOURCE_DIR
+    out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     if not raw_dir.exists():
@@ -200,8 +201,10 @@ def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
 
 
 def dl_oxiod(save_path, force_download: bool = False) -> None:
-    """Download + convert OxIOD into ``save_path/test/`` (all files are test)."""
-    _prepare(save_path, [(download, convert, SOURCE_DIR)], _test_role, force_download=force_download)
+    """Download + convert OxIOD flat into ``save_path``."""
+    _prepare_sources(save_path, [(download, convert)], force_download=force_download)
 
 
-BenchmarkOxIOD_Inclination = _spec("BenchmarkOxIOD_Inclination", "oxiod", dl_oxiod)
+oxiod_dataset = Dataset("oxiod", prepare=dl_oxiod)
+
+BenchmarkOxIOD_Inclination = _spec("BenchmarkOxIOD_Inclination", oxiod_dataset)

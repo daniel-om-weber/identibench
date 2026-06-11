@@ -1,7 +1,7 @@
 """RepoIMU TStick dataset.
 
 Source: https://github.com/agnieszkaszczesna/RepoIMU
-Output: data/RepoIMU/RepoIMU::TStick_{XX}_{Y}.hdf5  (21 files)
+Output: repoimu/RepoIMU::TStick_{XX}_{Y}.hdf5  (21 files, flat)
 
 CSV format: semicolon-separated, 2 header rows, 14 columns:
   time(s), qw, qx, qy, qz, acc_x, acc_y, acc_z,
@@ -15,11 +15,13 @@ from pathlib import Path
 
 import pandas as pd
 
-from ._common import _prepare, _spec, _test_role, download_file, extract_archive, fix_quaternion_flips, write_hdf5
+from identibench.dataset import Dataset
+from identibench.utils import download_file, extract_archive
+
+from ._common import _prepare_sources, _spec, fix_quaternion_flips, write_hdf5
 
 _REPO_ZIP = "https://github.com/agnieszkaszczesna/RepoIMU/archive/refs/heads/master.zip"
 _RAW_DIR = "repoimu"  # cache sub-directory under raw_dir for downloads + extraction
-SOURCE_DIR = "RepoIMU"  # sub-directory convert() writes into / routing key
 
 # (test_num, trial_num) pairs to convert — the trials present in the dataset.
 EXPECTED_TRIALS: set[tuple[int, int]] = {
@@ -71,7 +73,7 @@ def download(raw_dir: Path, force: bool = False) -> None:
 
 def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / _RAW_DIR
-    out_dir = out_dir / SOURCE_DIR
+    out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     zip_path = raw_dir / "RepoIMU-master.zip"
@@ -124,8 +126,10 @@ def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
 
 
 def dl_repoimu(save_path, force_download: bool = False) -> None:
-    """Download + convert RepoIMU into ``save_path/test/`` (all files are test)."""
-    _prepare(save_path, [(download, convert, SOURCE_DIR)], _test_role, force_download=force_download)
+    """Download + convert RepoIMU flat into ``save_path``."""
+    _prepare_sources(save_path, [(download, convert)], force_download=force_download)
 
 
-BenchmarkRepoIMU_Inclination = _spec("BenchmarkRepoIMU_Inclination", "repoimu", dl_repoimu)
+repoimu_dataset = Dataset("repoimu", prepare=dl_repoimu)
+
+BenchmarkRepoIMU_Inclination = _spec("BenchmarkRepoIMU_Inclination", repoimu_dataset)

@@ -1,4 +1,4 @@
-"""Tests for dataset download pipeline, HDF5 writing utilities, and ensure_dataset_exists."""
+"""Tests for dataset download pipeline, HDF5 writing utilities, and Dataset.ensure_exists."""
 
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -8,8 +8,7 @@ import numpy as np
 import pytest
 from nonlinear_benchmarks.utilities import Input_output_data
 
-from identibench.benchmark import BenchmarkSpecSimulation
-from identibench.metrics import rmse
+from identibench.dataset import Dataset
 from identibench.utils import _dummy_dataset_loader, dataset_to_hdf5, iodata_to_hdf5
 
 
@@ -26,88 +25,108 @@ def _make_iodata(n_samples: int = 100, name: str = "test_data", sampling_time: f
 
 
 def _failing_loader(save_path: Path, force_download: bool = False) -> None:
-    """A download function that always raises."""
+    """A prepare function that always raises."""
     raise ValueError("intentional failure")
 
 
+def _empty_loader(save_path: Path, force_download: bool = False) -> None:
+    """A prepare function that exits cleanly without writing anything."""
+
+
 # ---------------------------------------------------------------------------
-# 1. ensure_dataset_exists tests
+# 1. Dataset.ensure_exists tests (subprocess mechanism)
 # ---------------------------------------------------------------------------
 
 
-class TestEnsureDatasetExists:
-    """Tests for BenchmarkSpecBase.ensure_dataset_exists subprocess mechanism."""
+class TestEnsureExists:
+    def test_ensure_prepares_when_missing(self, tmp_path, monkeypatch):
+        """Dataset dir doesn't exist -> ensure_exists creates it via subprocess and writes the sentinel."""
+        monkeypatch.setenv("IDENTIBENCH_DATA_ROOT", str(tmp_path))
+        ds = Dataset("test_ds", prepare=_dummy_dataset_loader)
+        assert not ds.path.exists()
 
-    def _make_spec(self, data_root: Path, download_func=_dummy_dataset_loader, **kwargs):
-        return BenchmarkSpecSimulation(
-            name="test_spec",
-            dataset_id="test_ds",
-            u_cols=["u0"],
-            y_cols=["y0"],
-            metric_func=rmse,
-            download_func=download_func,
-            data_root=data_root,
-            **kwargs,
-        )
+        ds.ensure_exists()
 
-    def test_ensure_downloads_when_missing(self, tmp_path):
-        """Dataset dir doesn't exist -> ensure_dataset_exists creates it via subprocess."""
-        spec = self._make_spec(tmp_path)
-        ds_path = tmp_path / "test_ds"
-        assert not ds_path.exists()
-
-        spec.ensure_dataset_exists()
-
-        assert ds_path.is_dir()
+        assert ds.path.is_dir()
         for subdir in ["train", "valid", "test"]:
-            sub = ds_path / subdir
+            sub = ds.path / subdir
             assert sub.is_dir(), f"{subdir}/ not created"
-            hdf5_files = list(sub.glob("*.hdf5"))
-            assert len(hdf5_files) > 0, f"No HDF5 files in {subdir}/"
+            assert len(list(sub.glob("*.hdf5"))) > 0, f"No HDF5 files in {subdir}/"
+        # The sentinel is written last, after a successful preparation.
+        assert (ds.path / ".prepared").read_text() == ds.version
 
-    def test_ensure_skips_when_exists(self, tmp_path):
-        """Dataset dir already exists -> no subprocess spawned."""
+    def test_ensure_skips_when_sentinel_matches(self, tmp_path, monkeypatch):
+        """Dataset dir with a matching sentinel -> no subprocess spawned."""
+        monkeypatch.setenv("IDENTIBENCH_DATA_ROOT", str(tmp_path))
         ds_path = tmp_path / "test_ds"
         ds_path.mkdir(parents=True)
+        (ds_path / ".prepared").write_text("1")
         marker = ds_path / "marker.txt"
         marker.write_text("original")
 
-        spec = self._make_spec(tmp_path)
-        spec.ensure_dataset_exists()
+        Dataset("test_ds", prepare=_failing_loader).ensure_exists()  # would raise if invoked
 
-        # Marker file should be untouched (download_func was never called)
         assert marker.read_text() == "original"
 
-    def test_ensure_force_download(self, tmp_path):
-        """force_download=True -> re-downloads even when dir exists."""
-        spec = self._make_spec(tmp_path)
+    def test_ensure_reprepares_when_sentinel_missing(self, tmp_path, monkeypatch):
+        """A cached dir without the sentinel (e.g. an interrupted preparation or an
+        old-format cache) is cleared and re-prepared."""
+        monkeypatch.setenv("IDENTIBENCH_DATA_ROOT", str(tmp_path))
+        ds_path = tmp_path / "test_ds"
+        _dummy_dataset_loader(ds_path)
+        stray = ds_path / "stray.txt"
+        stray.write_text("leftover")
+
+        Dataset("test_ds", prepare=_dummy_dataset_loader).ensure_exists()
+
+        assert not stray.exists()  # clean slate
+        assert (ds_path / ".prepared").is_file()
+        assert (ds_path / "train").is_dir()
+
+    def test_ensure_force(self, tmp_path, monkeypatch):
+        """force=True -> re-prepares even with a matching sentinel."""
+        monkeypatch.setenv("IDENTIBENCH_DATA_ROOT", str(tmp_path))
         ds_path = tmp_path / "test_ds"
         ds_path.mkdir(parents=True)
-        # Place a marker that will be absent after re-download
-        marker = ds_path / "marker.txt"
-        marker.write_text("should_survive")
+        (ds_path / ".prepared").write_text("1")
+        (ds_path / "marker.txt").write_text("stale")
 
-        spec.ensure_dataset_exists(force_download=True)
+        Dataset("test_ds", prepare=_dummy_dataset_loader).ensure_exists(force=True)
 
-        # _dummy_dataset_loader creates train/valid/test dirs
+        assert not (ds_path / "marker.txt").exists()
         assert (ds_path / "train").is_dir()
         assert (ds_path / "valid").is_dir()
         assert (ds_path / "test").is_dir()
 
-    def test_ensure_raises_on_failure(self, tmp_path):
-        """download_func that raises -> RuntimeError with exit code info."""
-        spec = self._make_spec(tmp_path, download_func=_failing_loader)
+    def test_ensure_raises_on_failure(self, tmp_path, monkeypatch):
+        """prepare that raises -> RuntimeError with exit code info, no sentinel."""
+        monkeypatch.setenv("IDENTIBENCH_DATA_ROOT", str(tmp_path))
+        ds = Dataset("test_ds", prepare=_failing_loader)
 
         with pytest.raises(RuntimeError, match="failed.*exit code"):
-            spec.ensure_dataset_exists()
+            ds.ensure_exists()
+        assert not (ds.path / ".prepared").exists()
 
-    def test_ensure_no_download_func(self, tmp_path, capsys):
-        """download_func=None -> prints warning, doesn't crash."""
-        spec = self._make_spec(tmp_path, download_func=None)
-        spec.ensure_dataset_exists()
+    def test_ensure_raises_when_prepare_writes_nothing(self, tmp_path, monkeypatch):
+        """prepare exiting 0 without creating the directory -> explicit error."""
+        monkeypatch.setenv("IDENTIBENCH_DATA_ROOT", str(tmp_path))
+        ds = Dataset("test_ds", prepare=_empty_loader)
 
-        captured = capsys.readouterr()
-        assert "Warning" in captured.out
+        with pytest.raises(RuntimeError, match="wrote nothing"):
+            ds.ensure_exists()
+
+    def test_ensure_refuses_to_clear_outside_data_root(self, tmp_path, monkeypatch):
+        """A dataset dir that escapes the data root (e.g. via a symlink) is never cleared."""
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        root = tmp_path / "root"
+        root.mkdir()
+        (root / "test_ds").symlink_to(outside)
+        monkeypatch.setenv("IDENTIBENCH_DATA_ROOT", str(root))
+
+        with pytest.raises(RuntimeError, match="refusing to clear"):
+            Dataset("test_ds", prepare=_dummy_dataset_loader).ensure_exists()
+        assert outside.exists()
 
 
 # ---------------------------------------------------------------------------
@@ -169,6 +188,18 @@ class TestDatasetToHdf5:
         assert len(list((tmp_path / "train").glob("*.hdf5"))) == 2
         assert len(list((tmp_path / "valid").glob("*.hdf5"))) == 1
         assert len(list((tmp_path / "test").glob("*.hdf5"))) == 1
+
+    def test_dataset_to_hdf5_deterministic_names(self, tmp_path):
+        train = (_make_iodata(80, "tr0"), _make_iodata(80, "tr1"))
+        valid = (_make_iodata(20, "va0"),)
+        test = (_make_iodata(30, "te0"), _make_iodata(30, "te1"))
+
+        dataset_to_hdf5(train, valid, test, tmp_path)
+
+        # Enumerate order names — the contract benchmark patterns select on
+        # (e.g. silverbox's test/test_0.hdf5 = multisine).
+        assert sorted(p.name for p in (tmp_path / "train").glob("*.hdf5")) == ["train_0.hdf5", "train_1.hdf5"]
+        assert sorted(p.name for p in (tmp_path / "test").glob("*.hdf5")) == ["test_0.hdf5", "test_1.hdf5"]
 
     def test_dataset_to_hdf5_with_train_valid(self, tmp_path):
         train = (_make_iodata(80, "tr"),)
@@ -334,21 +365,15 @@ class TestSlowIntegration:
         # valid should be first 160 of train_val
         assert valid_len == 160
 
-    def test_run_benchmark_cascaded_tanks(self, tmp_path):
+    def test_run_benchmark_cascaded_tanks(self, tmp_path, monkeypatch):
         """Full end-to-end: download + run_benchmark with a dummy model."""
-        from identibench.benchmark import BenchmarkSpecSimulation, run_benchmark
-        from identibench.datasets.workshop import dl_cascaded_tanks
+        import dataclasses
 
-        spec = BenchmarkSpecSimulation(
-            name="test_tanks",
-            dataset_id="cascaded_tanks",
-            u_cols=["u0"],
-            y_cols=["y0"],
-            metric_func=rmse,
-            download_func=dl_cascaded_tanks,
-            init_window=10,
-            data_root=tmp_path,
-        )
+        from identibench.benchmark import run_benchmark
+        from identibench.datasets.workshop import BenchmarkCascadedTanks_Simulation
+
+        monkeypatch.setenv("IDENTIBENCH_DATA_ROOT", str(tmp_path))
+        spec = dataclasses.replace(BenchmarkCascadedTanks_Simulation, name="test_tanks")
 
         def build_model(context):
             def model(u, y, attrs):
@@ -390,28 +415,15 @@ class TestSlowIntegration:
                     assert col in f
                     assert f[col][()].dtype == np.float32
 
-    def test_run_benchmark_dfjimu_inclination(self, tmp_path):
+    def test_run_benchmark_dfjimu_inclination(self, tmp_path, monkeypatch):
         """Full end-to-end: download + run BenchmarkDFJIMU_Inclination with a dummy model."""
-        from identibench.benchmark import run_benchmark
-        from identibench.datasets.orientation.dfjimu import (
-            BenchmarkDFJIMU_Inclination,
-            dl_dfjimu,
-            dfjimu_u_generic,
-            dfjimu_y_q_generic,
-        )
+        import dataclasses
 
-        spec = BenchmarkSpecSimulation(
-            name="test_dfjimu_inclination",
-            dataset_id="dfjimu",
-            u_cols=dfjimu_u_generic,
-            y_cols=dfjimu_y_q_generic,
-            metric_func=BenchmarkDFJIMU_Inclination.metric_func,
-            download_func=dl_dfjimu,
-            sampling_time=1.0 / 50.0,
-            init_window=0,
-            split=BenchmarkDFJIMU_Inclination.split,
-            data_root=tmp_path,
-        )
+        from identibench.benchmark import run_benchmark
+        from identibench.datasets.orientation.dfjimu import BenchmarkDFJIMU_Inclination
+
+        monkeypatch.setenv("IDENTIBENCH_DATA_ROOT", str(tmp_path))
+        spec = dataclasses.replace(BenchmarkDFJIMU_Inclination, name="test_dfjimu_inclination")
 
         def build_model(context):
             def model(u, y, attrs):

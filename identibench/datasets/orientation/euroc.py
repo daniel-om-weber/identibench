@@ -1,7 +1,7 @@
 """EuRoC-MAV dataset — 6 Vicon Room sequences.
 
 Source: ETH Research Collection (https://doi.org/10.3929/ethz-b-000690084)
-Output: data/EuRoC-MAV/EurocMAV::{seq}.hdf5  (6 files)
+Output: euroc/EurocMAV::{seq}.hdf5  (6 files, flat)
 
 The original per-sequence downloads at robotics.ethz.ch are no longer available.
 The dataset is now hosted as two bundles (Vicon Room 1 + Vicon Room 2) on the
@@ -12,10 +12,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from ._common import _prepare, _spec, _test_role, download_file, extract_archive, fix_quaternion_flips, write_hdf5
+from identibench.dataset import Dataset
+from identibench.utils import download_file, extract_archive
+
+from ._common import _prepare_sources, _spec, fix_quaternion_flips, write_hdf5
 
 _RAW_DIR = "euroc"  # cache sub-directory under raw_dir for downloads + extraction
-SOURCE_DIR = "EuRoC-MAV"  # sub-directory convert() writes into / routing key
 
 SEQUENCES = [
     ("vicon_room1", "V1_01_easy"),
@@ -77,7 +79,7 @@ def _ensure_extracted(raw_dir: Path, force: bool = False) -> None:
 
 def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / _RAW_DIR
-    out_dir = out_dir / SOURCE_DIR
+    out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     _ensure_extracted(raw_dir, force=force)
@@ -144,8 +146,10 @@ def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
 
 
 def dl_euroc(save_path, force_download: bool = False) -> None:
-    """Download + convert EuRoC-MAV into ``save_path/test/`` (all files are test)."""
-    _prepare(save_path, [(download, convert, SOURCE_DIR)], _test_role, force_download=force_download)
+    """Download + convert EuRoC-MAV flat into ``save_path``."""
+    _prepare_sources(save_path, [(download, convert)], force_download=force_download)
 
 
-BenchmarkEuRoC_Inclination = _spec("BenchmarkEuRoC_Inclination", "euroc", dl_euroc)
+euroc_dataset = Dataset("euroc", prepare=dl_euroc)
+
+BenchmarkEuRoC_Inclination = _spec("BenchmarkEuRoC_Inclination", euroc_dataset)

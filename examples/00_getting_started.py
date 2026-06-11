@@ -31,8 +31,8 @@
 # * **Access Many Benchmarks from different systems:** Instantly utilize pre-configured benchmarks covering diverse domains like electronics (Silverbox), mechanics (Industrial Robot), process control (Cascaded Tanks), aerospace (Quadrotors), and more, available for both simulation and prediction tasks.
 # * **Automate Data Management:** Forget manual downloading and processing; the library handles fetching data from various sources (web, Drive, Dataverse), extracting archives (ZIP, RAR, MAT, BAG), converting to a standard HDF5 format, and caching locally.
 # * **Integrate Any Model to evaluate on all benchmarks:** Plug in your custom models, regardless of the Python framework used (NumPy, SciPy, PyTorch, TensorFlow, JAX, etc.), using a straightforward function interface (`build_model`) that receives all necessary context.
-# * **Capture Comprehensive Results:** Obtain detailed evaluation reports including standard metrics (RMSE, NRMSE, FIT%, etc.), task-specific scores, execution timings, configuration parameters (hyperparameters, seed), and raw model predictions for thorough analysis.
-# * **Easily Define New Benchmarks:** Go beyond the included datasets by creating your own benchmark specifications (`BenchmarkSpecSimulation`, `BenchmarkSpecPrediction`) for private data or unique tasks, leveraging the library's structure and transparent data format.
+# * **Capture Comprehensive Results:** Obtain detailed evaluation reports including standard metrics (RMSE, NRMSE, FIT%, etc.), per-test-set scores, execution timings, and configuration parameters (hyperparameters, seed) for thorough analysis.
+# * **Easily Define New Benchmarks:** Go beyond the included datasets by creating your own benchmark specifications — a `BenchmarkSpec` carrying a `Simulation` or `Prediction` task — for private data or unique tasks, leveraging the library's structure and transparent data format.
 
 # %% [markdown]
 # ## Installation
@@ -160,21 +160,23 @@ print(pred_md)
 #
 # ### Benchmark Types
 #
-# `identibench` defines two main types of benchmark tasks, specified using different classes:
+# Every benchmark is a single `BenchmarkSpec` carrying a **task** — a callable that owns the whole evaluation, including its metric. The library ships two built-in tasks; their parameters are readable from code (`spec.task.init_window`, `spec.task.horizon`, ...):
 #
-# * **Simulation (`BenchmarkSpecSimulation`)**:
+# * **Simulation (`Simulation(metric=..., init_window=...)`)**:
 #     * **Goal:** Evaluate a model's ability to perform a free-run simulation, predicting the system's output over an extended period given the input sequence.
 #     * **Typical Input to Predictor:** The full input sequence (`u_test`) and potentially an initial segment of the output sequence (`y_test[:init_window]`) for warm-up or state initialization.
 #     * **Expected Output from Predictor:** The predicted output sequence (`y_pred`) corresponding to the input, usually excluding the warm-up period.
 #     * **Use Case:** Assessing models intended for long-term prediction, control simulation, or understanding overall system dynamics.
 #
-# * **Prediction (`BenchmarkSpecPrediction`)**:
+# * **Prediction (`Prediction(horizon=..., step=..., metric=..., init_window=...)`)**:
 #     * **Goal:** Evaluate a model's ability to predict the system's output *k* steps into the future based on recent past data.
-#     * **Typical Input to Predictor:** Often involves windows of past inputs and outputs (e.g., `u[t:t+H]`, `y[t:t+H]`).
-#     * **Expected Output from Predictor:** The predicted output at a specific future time step (e.g., `y[t+H+k]`). The `pred_horizon` parameter defines 'k', and `pred_step` defines how frequently predictions are made.
+#     * **Typical Input to Predictor:** Sliding windows of past inputs and outputs (e.g., `u[t:t+H]`, `y[t:t+H]`).
+#     * **Expected Output from Predictor:** The predicted output over the window. The `horizon` parameter defines 'k', and `step` defines how frequently prediction windows start.
 #     * **Use Case:** Evaluating models focused on short-to-medium term forecasting, state estimation, or receding horizon control.
 #
-# * **`init_window`**: Both benchmark types often use an `init_window`. This specifies an initial number of time steps whose data might be provided to the model for initialization or warm-up. Importantly, data within this window is typically *excluded* from the final performance metric calculation to ensure a fair evaluation of the model's predictive capabilities beyond the initial transient.
+# * **`init_window`**: Both built-in tasks carry an `init_window`. This specifies an initial number of time steps whose data might be provided to the model for initialization or warm-up. Importantly, data within this window is *excluded* from the final performance metric calculation to ensure a fair evaluation of the model's predictive capabilities beyond the initial transient. `init_window=0` is a valid free-run setting — the model then receives an *empty* `y_init`.
+#
+# * **Named test sets**: Every spec names its test sets explicitly in `spec.test_sets`, each with its own file patterns (e.g. Silverbox's `multisine` / `arrow_full` / `arrow_no_extrapolation` are three explicit files). All named sets are scored into `result["test_sets"]`; the built-in tasks headline the first named set, and a task that pools across sets (e.g. the orientation benchmarks' cross-set `"all"`) names its own pool in its `EvalResult.headline`.
 #
 # ### Model Interface (`build_model`)
 #
@@ -182,7 +184,7 @@ print(pred_md)
 #
 # * **Purpose:** This function is responsible for defining your model architecture, training it using the provided data, and returning a callable predictor function.
 # * **Input (`context: TrainingContext`):** Your `build_model` function receives a single argument, `context`, which is a `TrainingContext` object. This object gives you access to:
-#     * `context.spec`: The full specification of the current benchmark being run (including dataset paths, input/output columns, `init_window`, etc.).
+#     * `context.spec`: The full specification of the current benchmark being run (dataset path, input/output columns, ...). Evaluation parameters live on the task: `context.spec.task.init_window`, `context.spec.task.horizon`, etc.
 #     * `context.hyperparameters`: A dictionary containing any hyperparameters you passed to `run_benchmark`. Use this to configure your model or training process.
 #     * `context.seed`: A random seed for ensuring reproducibility.
 #     * Data Access Methods: Functions like `context.get_train_sequences()` and `context.get_valid_sequences()` provide iterators over the raw, full-length training and validation data sequences (as tuples of NumPy arrays `(u, y, x)`). **Note:** You need to handle any batching or windowing required for your specific training algorithm *within* your `build_model` function.
@@ -216,8 +218,9 @@ idb.aggregate_benchmark_results(all_results, agg_funcs=["mean", "std"])
 #
 # Understanding how `identibench` organizes and stores data is helpful for direct interaction or adding new datasets.
 #
-# * **Directory Structure:** Datasets are stored under a root directory (default: `~/.identibench_data`, configurable via the `IDENTIBENCH_DATA_ROOT` environment variable). The structure follows: `DATA_ROOT / [dataset_id] / [subset] / [experiment_file.hdf5]`.
-# * **Subsets:** Standard subset names are `train`, `valid`, and `test`. An optional `train_valid` directory might contain combined data.
+# * **Two levels, strictly separated:** A `Dataset` only downloads and prepares files — it carries no roles, splits, or test sets. A `BenchmarkSpec` defines everything else: which files play which role, selected by explicit `(dataset, glob)` patterns. The same files can be split differently by different benchmarks.
+# * **Directory Structure:** Datasets are stored under a root directory (default: `~/.identibench_data`, configurable via the `IDENTIBENCH_DATA_ROOT` environment variable) as `DATA_ROOT / [dataset_id] / ...` — the layout below the dataset directory is whatever the preparer writes (most use `train/`, `valid/`, `test/` subdirectories).
+# * **Preparation sentinel:** A successful preparation ends by writing a `.prepared` file containing the dataset's format version. A directory without a matching sentinel is treated as absent and re-prepared from a clean slate, so an interrupted download can never masquerade as a ready dataset.
 # * **Download & Cache:** Data is downloaded automatically when a benchmark requires it and cached locally to avoid re-downloads. The `identibench.datasets.download_all_datasets` function can fetch all datasets at once.
 # * **File Format:** Processed time-series data is stored in the **HDF5 (`.hdf5`)** format.
 # * **HDF5 Structure:**
@@ -242,13 +245,13 @@ idb.aggregate_benchmark_results(all_results, agg_funcs=["mean", "std"])
 # The `run_benchmark` function returns a dictionary containing detailed results of the experiment. Key entries include:
 #
 # * `benchmark_name` (`str`): The unique name of the benchmark specification used.
-# * `dataset_id` (`str`): Identifier for the dataset source.
+# * `datasets` (`list[str]`): The ids of every dataset the spec draws files from.
 # * `hyperparameters` (`dict`): The hyperparameters dictionary passed to the run.
 # * `seed` (`int`): The random seed used for the run.
 # * `training_time_seconds` (`float`): Wall-clock time spent inside your `build_model` function.
 # * `test_time_seconds` (`float`): Wall-clock time spent evaluating the returned predictor on the test set.
-# * `benchmark_type` (`str`): The type of benchmark run (e.g., `'BenchmarkSpecSimulation'`).
-# * `metric_name` (`str`): The name of the primary metric function defined in the spec.
-# * `metric_score` (`float`): The calculated score for the primary metric on the test set (aggregated if multiple test files).
-# * `custom_scores` (`dict`): Any additional scores calculated by custom evaluation logic specific to the benchmark.
-# * `model_predictions` (`list`): A list containing the raw outputs. For simulation, it's typically `[(y_pred_test1, y_true_test1), (y_pred_test2, y_true_test2), ...]`. For prediction, the structure might be nested reflecting windowed predictions.
+# * `benchmark_type` (`str`): The name of the task that ran (e.g., `'Simulation'`, `'Prediction'`).
+# * `metric_name` (`str`): The headline metric named by the task.
+# * `metric_score` (`float`): The value of the headline `(set, metric)` cell the task names in its `EvalResult.headline`.
+# * `test_sets` (`dict`): The full `{test_set: {metric: value}}` scores — every named test set is scored, not just the headline one. Flattened to `test_sets.<set>.<metric>` columns by `benchmark_results_to_dataframe`.
+# * `diagnostics` (`dict`): Non-scalar artifacts a task chooses to return (e.g. raw predictions under the reserved key `"predictions"`); empty for the built-in tasks and dropped from the DataFrame.

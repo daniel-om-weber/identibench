@@ -1,78 +1,62 @@
-"""Combined RIANN IMU orientation corpus (pooled-train / cross-dataset-test).
+"""Combined RIANN IMU orientation benchmark (pooled-train / cross-dataset-test).
 
-Reproduces the protocol from the RIANN paper in a single ``dataset_id``: it pools
-all six source datasets (BROAD, TUM-VI, OxIOD, EuRoC-MAV, RepoIMU,
-Caruso-Sassari — each a self-contained sibling module here) and assigns the
-paper's train/valid/test roles across them.
+Reproduces the protocol from the RIANN paper as a single multi-dataset
+benchmark: it pools all six source datasets (BROAD, TUM-VI, OxIOD, EuRoC-MAV,
+RepoIMU, Caruso-Sassari — each a self-contained sibling module here) and
+assigns the paper's train/valid/test roles via explicit file patterns. The
+sources are stored once; this benchmark adds no data of its own.
 
     Weber, Gühmann, Seel. "RIANN — A Robust Neural Network Outperforms Attitude
     Estimation Filters." AI 2021, 2(3):444-463. doi:10.3390/ai2030028
 
-Data format and evaluation are shared with the per-source datasets and live in
-:mod:`._common`: each file holds 1-D float32 ``acc_x..acc_z`` (m/s²),
+Data format and evaluation are shared with the per-source benchmarks and live
+in :mod:`._common`: each file holds 1-D float32 ``acc_x..acc_z`` (m/s²),
 ``gyr_x..gyr_z`` (rad/s), ``dt`` (s), the ground-truth quaternion ``q_w..q_z``,
-and a ``movement_mask``. The headline ``metric_func`` is the first-sample-aligned
-(unmasked) inclination RMSE; the faithful masked + 99th-percentile per-source
-numbers come from :func:`._common.riann_eval` (re-exported here) via
-``custom_test_evaluation`` and surface as ``cs_*`` columns.
+and a ``movement_mask``. Evaluation is the
+:class:`._common.MaskedPooledInclination` task: masked + first-sample-aligned
+inclination errors, sample-pooled per source (one named test set per source)
+plus a cross-set ``"all"`` pool, which is the headline.
 """
 
 __all__ = [
-    "dl_riann",
-    "riann_eval",
     "BenchmarkRIANN_Inclination",
     "riann_benchmarks",
 ]
 
+from identibench.benchmark import BenchmarkSpec
+
 from . import broad, caruso, euroc, oxiod, repoimu, tumvi
-from ._common import _prepare, _spec, riann_eval
+from ._common import IMU_U_COLS, IMU_Y_COLS, MaskedPooledInclination
 
-# RIANN combined-corpus split rules (from riann/data.py).
-MYON_VALID_IDS = {14, 39, 21}
-MYON_TEST_IDS = {29, 22, 35}
-TUMVI_TRAIN_ROOMS = {"room1", "room2", "room3"}
+# RIANN split rules (from riann/data.py), keyed on the Myon trial number in the
+# filename prefix (BROAD files are `NN_description.hdf5`, NN = 01..39) and the
+# TUM-VI room number (`*room{N}.hdf5`, N = 1..6).
+MYON_VALID_IDS = (14, 21, 39)
+MYON_TEST_IDS = (22, 29, 35)
+MYON_TRAIN_IDS = tuple(i for i in range(1, 40) if i not in MYON_VALID_IDS + MYON_TEST_IDS)
+TUMVI_TRAIN_ROOMS = (1, 2, 3)
+TUMVI_VALID_ROOMS = (4, 5, 6)
 
-# (download, convert, source_dir) for every source pooled into the corpus.
-_SOURCES = [
-    (broad.download, broad.convert, broad.SOURCE_DIR),
-    (tumvi.download, tumvi.convert, tumvi.SOURCE_DIR),
-    (oxiod.download, oxiod.convert, oxiod.SOURCE_DIR),
-    (euroc.download, euroc.convert, euroc.SOURCE_DIR),
-    (repoimu.download, repoimu.convert, repoimu.SOURCE_DIR),
-    (caruso.download, caruso.convert, caruso.SOURCE_DIR),
-]
+BenchmarkRIANN_Inclination = BenchmarkSpec(
+    name="BenchmarkRIANN_Inclination",
+    u_cols=IMU_U_COLS,
+    y_cols=IMU_Y_COLS,
+    train=[(broad.broad_dataset, f"{i:02d}_*.hdf5") for i in MYON_TRAIN_IDS]
+    + [(tumvi.tumvi_dataset, f"*room{n}.hdf5") for n in TUMVI_TRAIN_ROOMS],
+    valid=[(broad.broad_dataset, f"{i:02d}_*.hdf5") for i in MYON_VALID_IDS]
+    + [(tumvi.tumvi_dataset, f"*room{n}.hdf5") for n in TUMVI_VALID_ROOMS],
+    # One named test set per source; TUM-VI is train/valid-only in this split.
+    test_sets={
+        "broad": [(broad.broad_dataset, f"{i:02d}_*.hdf5") for i in MYON_TEST_IDS],
+        "oxiod": [(oxiod.oxiod_dataset, "*.hdf5")],
+        "euroc": [(euroc.euroc_dataset, "*.hdf5")],
+        "repoimu": [(repoimu.repoimu_dataset, "*.hdf5")],
+        "caruso": [(caruso.caruso_dataset, "*.hdf5")],
+    },
+    task=MaskedPooledInclination(),
+)
 
-
-def _myon_role(fname: str) -> str:
-    i = int(fname.split("_")[0])
-    if i in MYON_VALID_IDS:
-        return "valid"
-    if i in MYON_TEST_IDS:
-        return "test"
-    return "train"
-
-
-def _tumvi_role(fname: str) -> str:
-    return "train" if any(r in fname for r in TUMVI_TRAIN_ROOMS) else "valid"
-
-
-def _riann_role(source: str, fname: str) -> str:
-    if source == broad.SOURCE_DIR:  # "Myon"
-        return _myon_role(fname)
-    if source == tumvi.SOURCE_DIR:  # "TUM-VI"
-        return _tumvi_role(fname)
-    return "test"  # OxIOD, EuRoC-MAV, RepoIMU, Caruso-Sassari
-
-
-def dl_riann(save_path, force_download: bool = False) -> None:
-    """Materialize the full combined RIANN corpus (all six sources) with the
-    paper's cross-dataset train/valid/test split."""
-    _prepare(save_path, _SOURCES, _riann_role, force_download=force_download)
-
-
-BenchmarkRIANN_Inclination = _spec("BenchmarkRIANN_Inclination", "riann", dl_riann)
-
-# The RIANN family: the combined corpus + the six datasets it pools.
+# The RIANN family: the combined benchmark + the six per-source benchmarks.
 riann_benchmarks = {
     "RIANN_Inclination": BenchmarkRIANN_Inclination,
     "BROAD_Inclination": broad.BenchmarkBROAD_Inclination,

@@ -1,6 +1,8 @@
 """Industrial robot forward/inverse benchmark dataset definitions."""
 
 __all__ = [
+    "robot_forward_dataset",
+    "robot_inverse_dataset",
     "u_forward",
     "y_forward",
     "BenchmarkRobotForward_Simulation",
@@ -14,7 +16,8 @@ __all__ = [
 ]
 
 from ..utils import write_dataset, write_array
-from ._common import make_sim_pred
+from ..benchmark import BenchmarkSpec, Prediction, Simulation
+from ..dataset import Dataset
 import identibench.metrics
 from nonlinear_benchmarks.utilities import cashed_download
 from pathlib import Path
@@ -85,16 +88,26 @@ def dl_robot_forward(
 u_forward = [f"u{i}" for i in range(0, 6)]
 y_forward = [f"y{i}" for i in range(0, 6)]
 
-BenchmarkRobotForward_Simulation, BenchmarkRobotForward_Prediction = make_sim_pred(
-    name_base="BenchmarkRobotForward",
-    dataset_id="robot_forward",
+robot_forward_dataset = Dataset("robot_forward", prepare=dl_robot_forward)
+
+_robot_forward = dict(
     u_cols=u_forward,
     y_cols=y_forward,
-    metric_func=identibench.metrics.rmse,
-    download_func=dl_robot_forward,
-    init_window=100,
-    pred_horizon=100,
-    pred_step=100,
+    train=[(robot_forward_dataset, "train/*.hdf5")],
+    valid=[(robot_forward_dataset, "valid/*.hdf5")],
+    test_sets={"test": [(robot_forward_dataset, "test/*.hdf5")]},
+)
+
+BenchmarkRobotForward_Simulation = BenchmarkSpec(
+    name="BenchmarkRobotForward_Simulation",
+    task=Simulation(metric=identibench.metrics.rmse, init_window=100),
+    **_robot_forward,
+)
+
+BenchmarkRobotForward_Prediction = BenchmarkSpec(
+    name="BenchmarkRobotForward_Prediction",
+    task=Prediction(horizon=100, step=100, metric=identibench.metrics.rmse, init_window=100),
+    **_robot_forward,
 )
 
 
@@ -115,14 +128,24 @@ def dl_robot_inverse(
 u_inverse = [f"u{i}" for i in range(0, 12)]
 y_inverse = [f"y{i}" for i in range(0, 6)]
 
-BenchmarkRobotInverse_Simulation, BenchmarkRobotInverse_Prediction = make_sim_pred(
-    name_base="BenchmarkRobotInverse",
-    dataset_id="robot_inverse",
+robot_inverse_dataset = Dataset("robot_inverse", prepare=dl_robot_inverse)
+
+_robot_inverse = dict(
     u_cols=u_inverse,
     y_cols=y_inverse,
-    metric_func=identibench.metrics.rmse,
-    download_func=dl_robot_inverse,
-    init_window=100,
-    pred_horizon=100,
-    pred_step=100,
+    train=[(robot_inverse_dataset, "train/*.hdf5")],
+    valid=[(robot_inverse_dataset, "valid/*.hdf5")],
+    test_sets={"test": [(robot_inverse_dataset, "test/*.hdf5")]},
+)
+
+BenchmarkRobotInverse_Simulation = BenchmarkSpec(
+    name="BenchmarkRobotInverse_Simulation",
+    task=Simulation(metric=identibench.metrics.rmse, init_window=100),
+    **_robot_inverse,
+)
+
+BenchmarkRobotInverse_Prediction = BenchmarkSpec(
+    name="BenchmarkRobotInverse_Prediction",
+    task=Prediction(horizon=100, step=100, metric=identibench.metrics.rmse, init_window=100),
+    **_robot_inverse,
 )

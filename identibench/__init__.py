@@ -1,14 +1,18 @@
-__version__ = "0.3.1"
+__version__ = "0.4.0"
 
 from .benchmark import (
     run_benchmark,
     run_benchmarks,
-    BenchmarkSpecSimulation,
-    BenchmarkSpecPrediction,
+    BenchmarkSpec,
+    Simulation,
+    Prediction,
+    WindowedEstimation,
+    EvalResult,
     TrainingContext,
     benchmark_results_to_dataframe,
     aggregate_benchmark_results,
 )
+from .dataset import Dataset
 from .utils import Sequence
 from . import metrics
 from . import datasets
@@ -58,6 +62,19 @@ from .datasets.orientation import (
     orientation_benchmarks,
 )
 
+# IAS (instantaneous angular speed) Benchmarks
+from .datasets.ias import (
+    BenchmarkBallBearing_Estimation,
+    BenchmarkParallelGearbox_Estimation,
+    BenchmarkPlanetaryGearbox_Estimation,
+    BenchmarkGasFoilBearing_Estimation,
+    BenchmarkBallBearing_Simulation,
+    BenchmarkParallelGearbox_Simulation,
+    BenchmarkPlanetaryGearbox_Simulation,
+    BenchmarkGasFoilBearing_Simulation,
+    ias_benchmarks,
+)
+
 simulation_benchmarks = {
     "WH_Sim": BenchmarkWH_Simulation,
     "Silverbox_Sim": BenchmarkSilverbox_Simulation,
@@ -79,6 +96,14 @@ simulation_benchmarks = {
     "EuRoC_Inclination": BenchmarkEuRoC_Inclination,
     "RepoIMU_Inclination": BenchmarkRepoIMU_Inclination,
     "Caruso_Inclination": BenchmarkCaruso_Inclination,
+    "BallBearing_Estimation": BenchmarkBallBearing_Estimation,
+    "ParallelGearbox_Estimation": BenchmarkParallelGearbox_Estimation,
+    "PlanetaryGearbox_Estimation": BenchmarkPlanetaryGearbox_Estimation,
+    "GasFoilBearing_Estimation": BenchmarkGasFoilBearing_Estimation,
+    "BallBearing_Simulation": BenchmarkBallBearing_Simulation,
+    "ParallelGearbox_Simulation": BenchmarkParallelGearbox_Simulation,
+    "PlanetaryGearbox_Simulation": BenchmarkPlanetaryGearbox_Simulation,
+    "GasFoilBearing_Simulation": BenchmarkGasFoilBearing_Simulation,
 }
 
 prediction_benchmarks = {
@@ -101,8 +126,12 @@ __all__ = [
     # Core API
     "run_benchmark",
     "run_benchmarks",
-    "BenchmarkSpecSimulation",
-    "BenchmarkSpecPrediction",
+    "Dataset",
+    "BenchmarkSpec",
+    "Simulation",
+    "Prediction",
+    "WindowedEstimation",
+    "EvalResult",
     "TrainingContext",
     "benchmark_results_to_dataframe",
     "aggregate_benchmark_results",
@@ -115,6 +144,7 @@ __all__ = [
     "prediction_benchmarks",
     "all_benchmarks",
     "orientation_benchmarks",
+    "ias_benchmarks",
     # Workshop benchmark specs
     "BenchmarkWH_Simulation",
     "BenchmarkWH_Prediction",
@@ -151,4 +181,13 @@ __all__ = [
     "BenchmarkEuRoC_Inclination",
     "BenchmarkRepoIMU_Inclination",
     "BenchmarkCaruso_Inclination",
+    # IAS benchmark specs
+    "BenchmarkBallBearing_Estimation",
+    "BenchmarkParallelGearbox_Estimation",
+    "BenchmarkPlanetaryGearbox_Estimation",
+    "BenchmarkGasFoilBearing_Estimation",
+    "BenchmarkBallBearing_Simulation",
+    "BenchmarkParallelGearbox_Simulation",
+    "BenchmarkPlanetaryGearbox_Simulation",
+    "BenchmarkGasFoilBearing_Simulation",
 ]

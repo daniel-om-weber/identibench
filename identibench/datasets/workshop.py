@@ -1,6 +1,12 @@
 """Workshop benchmark dataset definitions (WH, Silverbox, Tanks, EMPS, NoisyWH, CED)."""
 
 __all__ = [
+    "wh_dataset",
+    "silverbox_dataset",
+    "cascaded_tanks_dataset",
+    "emps_dataset",
+    "noisy_wh_dataset",
+    "ced_dataset",
     "BenchmarkWH_Simulation",
     "BenchmarkWH_Prediction",
     "BenchmarkSilverbox_Simulation",
@@ -21,15 +27,25 @@ __all__ = [
     "dl_ced",
 ]
 
-from ..utils import dataset_to_hdf5, iodata_to_hdf5
-from ._common import dl_split_by_index, make_sim_pred
-import identibench.benchmark as idb
-import identibench.metrics
+from pathlib import Path
+
 import nonlinear_benchmarks
 import numpy as np
 from nonlinear_benchmarks.utilities import Input_output_data
-from pathlib import Path
-import shutil
+from scipy.io import loadmat
+
+import identibench.metrics
+from ..benchmark import BenchmarkSpec, Prediction, Simulation
+from ..dataset import Dataset
+from ..utils import dataset_to_hdf5, iodata_to_hdf5
+from ._common import dl_split_by_index
+
+
+def rmse_mV(inp: np.ndarray, targ: np.ndarray) -> float:
+    return identibench.metrics.rmse(inp, targ) * 1000
+
+
+# ───────────────────────── Wiener-Hammerstein ─────────────────────────
 
 
 def dl_wiener_hammerstein(
@@ -43,21 +59,31 @@ def dl_wiener_hammerstein(
     )
 
 
-def rmse_mV(inp: np.ndarray, targ: np.ndarray) -> float:
-    return identibench.metrics.rmse(inp, targ) * 1000
+wh_dataset = Dataset("wh", prepare=dl_wiener_hammerstein)
 
-
-BenchmarkWH_Simulation, BenchmarkWH_Prediction = make_sim_pred(
-    name_base="BenchmarkWH",
-    dataset_id="wh",
+_wh = dict(
     u_cols=["u0"],
     y_cols=["y0"],
-    metric_func=rmse_mV,
-    download_func=dl_wiener_hammerstein,
-    init_window=50,
-    pred_horizon=100,
-    pred_step=100,
+    train=[(wh_dataset, "train/*.hdf5")],
+    valid=[(wh_dataset, "valid/*.hdf5")],
+    train_valid=[(wh_dataset, "train_valid/*.hdf5")],
+    test_sets={"test": [(wh_dataset, "test/*.hdf5")]},
 )
+
+BenchmarkWH_Simulation = BenchmarkSpec(
+    name="BenchmarkWH_Simulation",
+    task=Simulation(metric=rmse_mV, init_window=50),
+    **_wh,
+)
+
+BenchmarkWH_Prediction = BenchmarkSpec(
+    name="BenchmarkWH_Prediction",
+    task=Prediction(horizon=100, step=100, metric=rmse_mV, init_window=50),
+    **_wh,
+)
+
+
+# ───────────────────────── Silverbox ─────────────────────────
 
 
 def dl_silverbox(
@@ -69,35 +95,36 @@ def dl_silverbox(
     dl_split_by_index(nonlinear_benchmarks.Silverbox, save_path, force_download, save_train_valid, split_idx)
 
 
-def evaluate_silverbox(results: list[tuple[np.ndarray, np.ndarray]], spec: idb.BenchmarkSpecBase) -> dict[str, float]:
+silverbox_dataset = Dataset("silverbox", prepare=dl_silverbox)
 
-    test_configs = [
-        ("test_0.hdf5", "multisine_rmse"),
-        ("test_1.hdf5", "arrow_full_rmse"),
-        ("test_2.hdf5", "arrow_no_extrapolation_rmse"),
-    ]
-
-    aggregated_scores = {}
-    for filename_part, score_name in test_configs:
-        # Find the index for the current filename part
-        idx = next(i for i, s in enumerate(spec.test_files) if filename_part in s.name)
-        aggregated_scores.update(idb.aggregate_metric_score([results[idx]], spec.metric_func, score_name=score_name))
-
-    return aggregated_scores
-
-
-BenchmarkSilverbox_Simulation, BenchmarkSilverbox_Prediction = make_sim_pred(
-    name_base="BenchmarkSilverbox",
-    dataset_id="silverbox",
+_silverbox = dict(
     u_cols=["u0"],
     y_cols=["y0"],
-    metric_func=rmse_mV,
-    download_func=dl_silverbox,
-    init_window=50,
-    pred_horizon=100,
-    pred_step=100,
-    custom_test_evaluation=evaluate_silverbox,
+    train=[(silverbox_dataset, "train/*.hdf5")],
+    valid=[(silverbox_dataset, "valid/*.hdf5")],
+    train_valid=[(silverbox_dataset, "train_valid/*.hdf5")],
+    # The three test records in deterministic enumerate order test_0/1/2.
+    test_sets={
+        "multisine": [(silverbox_dataset, "test/test_0.hdf5")],
+        "arrow_full": [(silverbox_dataset, "test/test_1.hdf5")],
+        "arrow_no_extrapolation": [(silverbox_dataset, "test/test_2.hdf5")],
+    },
 )
+
+BenchmarkSilverbox_Simulation = BenchmarkSpec(
+    name="BenchmarkSilverbox_Simulation",
+    task=Simulation(metric=rmse_mV, init_window=50),
+    **_silverbox,
+)
+
+BenchmarkSilverbox_Prediction = BenchmarkSpec(
+    name="BenchmarkSilverbox_Prediction",
+    task=Prediction(horizon=100, step=100, metric=rmse_mV, init_window=50),
+    **_silverbox,
+)
+
+
+# ───────────────────────── Cascaded Tanks ─────────────────────────
 
 
 def dl_cascaded_tanks(
@@ -117,17 +144,31 @@ def dl_cascaded_tanks(
     )
 
 
-BenchmarkCascadedTanks_Simulation, BenchmarkCascadedTanks_Prediction = make_sim_pred(
-    name_base="BenchmarkCascadedTanks",
-    dataset_id="cascaded_tanks",
+cascaded_tanks_dataset = Dataset("cascaded_tanks", prepare=dl_cascaded_tanks)
+
+_cascaded_tanks = dict(
     u_cols=["u0"],
     y_cols=["y0"],
-    metric_func=identibench.metrics.rmse,
-    download_func=dl_cascaded_tanks,
-    init_window=50,
-    pred_horizon=100,
-    pred_step=100,
+    train=[(cascaded_tanks_dataset, "train/*.hdf5")],
+    valid=[(cascaded_tanks_dataset, "valid/*.hdf5")],
+    train_valid=[(cascaded_tanks_dataset, "train_valid/*.hdf5")],
+    test_sets={"test": [(cascaded_tanks_dataset, "test/*.hdf5")]},
 )
+
+BenchmarkCascadedTanks_Simulation = BenchmarkSpec(
+    name="BenchmarkCascadedTanks_Simulation",
+    task=Simulation(metric=identibench.metrics.rmse, init_window=50),
+    **_cascaded_tanks,
+)
+
+BenchmarkCascadedTanks_Prediction = BenchmarkSpec(
+    name="BenchmarkCascadedTanks_Prediction",
+    task=Prediction(horizon=100, step=100, metric=identibench.metrics.rmse, init_window=50),
+    **_cascaded_tanks,
+)
+
+
+# ───────────────────────── EMPS ─────────────────────────
 
 
 def dl_emps(
@@ -139,26 +180,36 @@ def dl_emps(
     dl_split_by_index(nonlinear_benchmarks.EMPS, save_path, force_download, save_train_valid, split_idx)
 
 
-BenchmarkEMPS_Simulation, BenchmarkEMPS_Prediction = make_sim_pred(
-    name_base="BenchmarkEMPS",
-    dataset_id="emps",
+emps_dataset = Dataset("emps", prepare=dl_emps)
+
+_emps = dict(
     u_cols=["u0"],
     y_cols=["y0"],
-    metric_func=rmse_mV,
-    download_func=dl_emps,
-    init_window=20,
-    pred_horizon=500,
-    pred_step=100,
+    train=[(emps_dataset, "train/*.hdf5")],
+    valid=[(emps_dataset, "valid/*.hdf5")],
+    train_valid=[(emps_dataset, "train_valid/*.hdf5")],
+    test_sets={"test": [(emps_dataset, "test/*.hdf5")]},
+)
+
+BenchmarkEMPS_Simulation = BenchmarkSpec(
+    name="BenchmarkEMPS_Simulation",
+    task=Simulation(metric=rmse_mV, init_window=20),
+    **_emps,
+)
+
+BenchmarkEMPS_Prediction = BenchmarkSpec(
+    name="BenchmarkEMPS_Prediction",
+    task=Prediction(horizon=500, step=100, metric=rmse_mV, init_window=20),
+    **_emps,
 )
 
 
-from scipy.io import loadmat
+# ───────────────────────── Noisy Wiener-Hammerstein ─────────────────────────
 
 
 def dl_noisy_wh(
     save_path: Path,  # directory the files are written to, created if it does not exist
     force_download: bool = False,  # force download the dataset
-    save_train_valid: bool = True,  # save unsplitted train and valid datasets in 'train_valid' subdirectory
 ) -> None:
     "the wiener hammerstein dataset with process noise"
 
@@ -185,26 +236,34 @@ def dl_noisy_wh(
             iodata = Input_output_data(u=ui, y=yi, sampling_time=1 / fs)
             fname = f"{f_path.stem}_{idx + 1}"
             iodata_to_hdf5(iodata, hdf_path, fname)
-    if save_train_valid:
-        # copy train and valid files to train_valid directory
-        train_valid_dir = Path(save_path) / "train_valid"
-        train_valid_dir.mkdir(exist_ok=True)
-        for d in ["train", "valid"]:
-            for f in (Path(save_path) / d).glob("*.hdf5"):
-                shutil.copy2(f, train_valid_dir)
 
 
-BenchmarkNoisyWH_Simulation, BenchmarkNoisyWH_Prediction = make_sim_pred(
-    name_base="BenchmarkNoisyWH",
-    dataset_id="noisy_wh",
+noisy_wh_dataset = Dataset("noisy_wh", prepare=dl_noisy_wh)
+
+_noisy_wh = dict(
     u_cols=["u0"],
     y_cols=["y0"],
-    metric_func=rmse_mV,
-    download_func=dl_noisy_wh,
-    init_window=100,
-    pred_horizon=100,
-    pred_step=100,
+    train=[(noisy_wh_dataset, "train/*.hdf5")],
+    valid=[(noisy_wh_dataset, "valid/*.hdf5")],
+    # The split is file-level, so the unsplit estimation data is simply both dirs.
+    train_valid=[(noisy_wh_dataset, "train/*.hdf5"), (noisy_wh_dataset, "valid/*.hdf5")],
+    test_sets={"test": [(noisy_wh_dataset, "test/*.hdf5")]},
 )
+
+BenchmarkNoisyWH_Simulation = BenchmarkSpec(
+    name="BenchmarkNoisyWH_Simulation",
+    task=Simulation(metric=rmse_mV, init_window=100),
+    **_noisy_wh,
+)
+
+BenchmarkNoisyWH_Prediction = BenchmarkSpec(
+    name="BenchmarkNoisyWH_Prediction",
+    task=Prediction(horizon=100, step=100, metric=rmse_mV, init_window=100),
+    **_noisy_wh,
+)
+
+
+# ───────────────────────── CED ─────────────────────────
 
 
 def dl_ced(
@@ -220,30 +279,29 @@ def dl_ced(
     dataset_to_hdf5(train, valid, test, save_path, train_valid=(train_val if save_train_valid else None))
 
 
-def evaluate_ced(results: list[tuple[np.ndarray, np.ndarray]], spec: idb.BenchmarkSpecBase) -> dict[str, float]:
-    test_configs = [
-        ("test_0.hdf5", "test_1_rmse"),
-        ("test_1.hdf5", "test_2_rmse"),
-    ]
+ced_dataset = Dataset("ced", prepare=dl_ced)
 
-    aggregated_scores = {}
-    for filename_part, score_name in test_configs:
-        # Find the index for the current filename part
-        idx = next(i for i, s in enumerate(spec.test_files) if filename_part in s.name)
-        aggregated_scores.update(idb.aggregate_metric_score([results[idx]], spec.metric_func, score_name=score_name))
-
-    return aggregated_scores
-
-
-BenchmarkCED_Simulation, BenchmarkCED_Prediction = make_sim_pred(
-    name_base="BenchmarkCED",
-    dataset_id="ced",
+_ced = dict(
     u_cols=["u0"],
     y_cols=["y0"],
-    metric_func=identibench.metrics.rmse,
-    download_func=dl_ced,
-    init_window=10,
-    pred_horizon=30,
-    pred_step=30,
-    custom_test_evaluation=evaluate_ced,
+    train=[(ced_dataset, "train/*.hdf5")],
+    valid=[(ced_dataset, "valid/*.hdf5")],
+    train_valid=[(ced_dataset, "train_valid/*.hdf5")],
+    # The two test records in deterministic enumerate order test_0/1.
+    test_sets={
+        "test_1": [(ced_dataset, "test/test_0.hdf5")],
+        "test_2": [(ced_dataset, "test/test_1.hdf5")],
+    },
+)
+
+BenchmarkCED_Simulation = BenchmarkSpec(
+    name="BenchmarkCED_Simulation",
+    task=Simulation(metric=identibench.metrics.rmse, init_window=10),
+    **_ced,
+)
+
+BenchmarkCED_Prediction = BenchmarkSpec(
+    name="BenchmarkCED_Prediction",
+    task=Prediction(horizon=30, step=30, metric=identibench.metrics.rmse, init_window=10),
+    **_ced,
 )

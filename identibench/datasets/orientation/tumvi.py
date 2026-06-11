@@ -1,7 +1,7 @@
 """TUM-VI dataset — 6 room sequences.
 
 Source: https://cvg.cit.tum.de/data/datasets/visual-inertial-dataset
-Output: data/TUM-VI/TumVI::room{N}.hdf5  (6 files)
+Output: tumvi/TumVI::room{N}.hdf5  (6 files, flat)
 
 Archives are large (~1.6 GB each, includes camera images).
 Only imu.txt and gt_imu.csv are streamed from each tar — the full
@@ -16,15 +16,15 @@ import pandas as pd
 import requests
 from tqdm import tqdm
 
+from identibench.dataset import Dataset
+
 from ._common import (
-    _prepare,
+    _prepare_sources,
     _spec,
-    _test_role,
     write_hdf5,
 )
 
 _RAW_DIR = "tumvi"  # cache sub-directory under raw_dir for downloads + extraction
-SOURCE_DIR = "TUM-VI"  # sub-directory convert() writes into / routing key
 
 _BASE = "https://cvg.cit.tum.de/tumvi/exported/euroc/512_16"
 _ROOMS = list(range(1, 7))
@@ -91,7 +91,7 @@ class _ProgressReader:
 
 def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / _RAW_DIR
-    out_dir = out_dir / SOURCE_DIR
+    out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     for n in _ROOMS:
@@ -177,8 +177,10 @@ def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
 
 
 def dl_tumvi(save_path, force_download: bool = False) -> None:
-    """Download + convert TUM-VI into ``save_path/test/`` (all files are test)."""
-    _prepare(save_path, [(download, convert, SOURCE_DIR)], _test_role, force_download=force_download)
+    """Download + convert TUM-VI flat into ``save_path``."""
+    _prepare_sources(save_path, [(download, convert)], force_download=force_download)
 
 
-BenchmarkTUMVI_Inclination = _spec("BenchmarkTUMVI_Inclination", "tumvi", dl_tumvi)
+tumvi_dataset = Dataset("tumvi", prepare=dl_tumvi)
+
+BenchmarkTUMVI_Inclination = _spec("BenchmarkTUMVI_Inclination", tumvi_dataset)

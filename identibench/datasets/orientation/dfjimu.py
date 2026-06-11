@@ -1,13 +1,10 @@
 """Weygers & Kok (2020) IMU orientation dataset (the *dfjimu* dataset)."""
 
 __all__ = [
+    "dfjimu_dataset",
     "dl_dfjimu",
     "BenchmarkDFJIMU_Inclination",
     "BenchmarkDFJIMU_Relative",
-    "dfjimu_split_all_test",
-    "dfjimu_split_train_test",
-    "dfjimu_split_all_test_persensor",
-    "dfjimu_split_train_test_persensor",
 ]
 
 from io import BytesIO
@@ -18,7 +15,8 @@ import numpy as np
 import requests
 import scipy.io
 
-from identibench.benchmark import BenchmarkSpecSimulation
+from identibench.benchmark import BenchmarkSpec, Simulation
+from identibench.dataset import Dataset
 from identibench.metrics import _quat_conj, _quat_mul, inclination_rmse_deg, orientation_rmse_deg
 from identibench.utils import write_dataset
 
@@ -56,55 +54,6 @@ dfjimu_y_q1_cols = [f"q1_{a}" for a in _wxyz]
 dfjimu_y_q2_cols = [f"q2_{a}" for a in _wxyz]
 dfjimu_y_rel_cols = [f"qrel_{a}" for a in _wxyz]
 dfjimu_y_q_generic = [f"q_{a}" for a in _wxyz]
-
-# --- Split definitions ---
-
-dfjimu_split_all_test = {
-    "test": ALL_HDF5_FILES,
-}
-
-dfjimu_split_train_test = {
-    "train": [
-        f"{n}.hdf5"
-        for n in [
-            "data_1D_01",
-            "data_1D_02",
-            "data_1D_03",
-            "data_2D_01",
-            "data_2D_02",
-            "data_2D_03",
-            "data_3D_01",
-            "data_3D_02",
-            "data_3D_03",
-        ]
-    ],
-    "valid": [f"{n}.hdf5" for n in ["data_1D_04", "data_2D_05", "data_3D_04"]],
-    "test": [f"{n}.hdf5" for n in ["data_1D_05", "data_2D_07", "data_3D_05"]],
-}
-
-_TRAIN_NAMES = [
-    "data_1D_01",
-    "data_1D_02",
-    "data_1D_03",
-    "data_2D_01",
-    "data_2D_02",
-    "data_2D_03",
-    "data_3D_01",
-    "data_3D_02",
-    "data_3D_03",
-]
-_VALID_NAMES = ["data_1D_04", "data_2D_05", "data_3D_04"]
-_TEST_NAMES = ["data_1D_05", "data_2D_07", "data_3D_05"]
-
-dfjimu_split_all_test_persensor = {
-    "test": ALL_HDF5_FILES_PERSENSOR,
-}
-
-dfjimu_split_train_test_persensor = {
-    "train": [f"{n}_{s}.hdf5" for n in _TRAIN_NAMES for s in ("s1", "s2")],
-    "valid": [f"{n}_{s}.hdf5" for n in _VALID_NAMES for s in ("s1", "s2")],
-    "test": [f"{n}_{s}.hdf5" for n in _TEST_NAMES for s in ("s1", "s2")],
-}
 
 
 def _quat_relative(q1: np.ndarray, q2: np.ndarray) -> np.ndarray:
@@ -183,28 +132,31 @@ def dl_dfjimu(
                 vf.attrs["r_21"] = r_21
 
 
-# --- Benchmark specifications ---
+dfjimu_dataset = Dataset("dfjimu", prepare=dl_dfjimu)
 
-BenchmarkDFJIMU_Inclination = BenchmarkSpecSimulation(
+# --- Benchmark specifications ---
+# Both specs share one dataset but select DISJOINT file groups via explicit
+# wildcard-free patterns (the flat directory mixes base and virtual files, so a
+# `*.hdf5` glob would conflate them): Inclination evaluates the 30 per-sensor
+# virtual files with generic acc/gyr/q_* columns, Relative the 15 combined
+# files with the full two-sensor columns and the relative quaternion target.
+
+BenchmarkDFJIMU_Inclination = BenchmarkSpec(
     name="BenchmarkDFJIMU_Inclination",
-    dataset_id="dfjimu",
     u_cols=dfjimu_u_generic,
     y_cols=dfjimu_y_q_generic,
-    metric_func=inclination_rmse_deg,
-    download_func=dl_dfjimu,
-    sampling_time=1.0 / 50.0,
-    init_window=0,
-    split=dfjimu_split_all_test_persensor,
+    train=[],
+    valid=[],
+    test_sets={"persensor": [(dfjimu_dataset, f) for f in ALL_HDF5_FILES_PERSENSOR]},
+    task=Simulation(metric=inclination_rmse_deg, init_window=0),
 )
 
-BenchmarkDFJIMU_Relative = BenchmarkSpecSimulation(
+BenchmarkDFJIMU_Relative = BenchmarkSpec(
     name="BenchmarkDFJIMU_Relative",
-    dataset_id="dfjimu",
     u_cols=dfjimu_u_cols,
     y_cols=dfjimu_y_rel_cols,
-    metric_func=orientation_rmse_deg,
-    download_func=dl_dfjimu,
-    sampling_time=1.0 / 50.0,
-    init_window=0,
-    split=dfjimu_split_all_test,
+    train=[],
+    valid=[],
+    test_sets={"combined": [(dfjimu_dataset, f) for f in ALL_HDF5_FILES]},
+    task=Simulation(metric=orientation_rmse_deg, init_window=0),
 )

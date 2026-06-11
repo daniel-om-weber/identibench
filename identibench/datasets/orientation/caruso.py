@@ -1,8 +1,7 @@
-"""Caruso-Sassari MIMU optical dataset → two output dirs.
+"""Caruso-Sassari MIMU optical dataset.
 
 Source: https://github.com/marcocaruso/mimu_optical_dataset_caruso_sassari/releases/tag/v5.0
-Output: data/Caruso-Sassari/Marco::{speed}_v4_{sensor}.hdf5      (18 files)
-        data/Caruso-Sassari_orig/Marco::{speed}_v4_{sensor}.hdf5  (18 files)
+Output: caruso/Marco::{speed}_v4_{sensor}.hdf5  (18 files, flat)
 
 The release contains 3 mat files (slow_v5.mat, medium_v5.mat, fast_v5.mat),
 each bundling data for 6 MIMUs × 2 reps.
@@ -17,8 +16,7 @@ v5 mat format (flat arrays, not structs):
   Qs: (N, 4) optical quaternion (w, x, y, z)
   indarb, indx, indy, indz: movement index arrays (1-indexed)
 
-Caruso-Sassari      uses Qs with fix_quaternion_flips
-Caruso-Sassari_orig uses Qs as-is
+The optical quaternion is stored with fix_quaternion_flips applied.
 """
 
 from pathlib import Path
@@ -26,12 +24,13 @@ from pathlib import Path
 import numpy as np
 from scipy.io import loadmat
 
-from ._common import _prepare, _spec, _test_role, download_file, fix_quaternion_flips, write_hdf5
+from identibench.dataset import Dataset
+from identibench.utils import download_file
+
+from ._common import _prepare_sources, _spec, fix_quaternion_flips, write_hdf5
 
 _RELEASE = "https://github.com/marcocaruso/mimu_optical_dataset_caruso_sassari/releases/download/v5.0"
 _RAW_DIR = "caruso"  # cache sub-directory under raw_dir for downloads
-# convert() also writes Caruso-Sassari_orig; only this dir is routed/kept.
-SOURCE_DIR = "Caruso-Sassari"
 _SPEEDS = ["slow", "medium", "fast"]
 _SENSOR_KEYS = ["AP1", "AP2", "SH1", "SH2", "XS1", "XS2"]
 _INDEX_KEYS = ["indarb", "indx", "indy", "indz"]
@@ -46,10 +45,8 @@ def download(raw_dir: Path, force: bool = False) -> None:
 
 def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
     raw_dir = raw_dir / _RAW_DIR
-    dir_main = out_dir / SOURCE_DIR
-    dir_orig = out_dir / "Caruso-Sassari_orig"
-    dir_main.mkdir(parents=True, exist_ok=True)
-    dir_orig.mkdir(parents=True, exist_ok=True)
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
 
     for speed in _SPEEDS:
         mat_path = raw_dir / f"{speed}_v5.mat"
@@ -83,28 +80,19 @@ def convert(raw_dir: Path, out_dir: Path, force: bool = False) -> None:
             gyr = sensor[:, 4:7]
             mag = sensor[:, 7:10]
 
-            out_name = f"{speed}_v4_{sensor_key}"
-
-            # Caruso-Sassari_orig: Qs as-is (no flip correction)
-            out_orig = dir_orig / f"Marco::{out_name}.hdf5"
-            if out_orig.exists() and not force:
-                print(f"    Skipping (exists): {out_orig.name}")
+            out_path = out_dir / f"Marco::{speed}_v4_{sensor_key}.hdf5"
+            if out_path.exists() and not force:
+                print(f"    Skipping (exists): {out_path.name}")
             else:
-                print(f"    Writing {out_orig.name}  ({n_samples} samples)")
-                write_hdf5(out_orig, acc, gyr, qs, dt, mag=mag, movement_mask=movement)
-
-            # Caruso-Sassari: Qs with flip correction
-            out_main = dir_main / f"Marco::{out_name}.hdf5"
-            if out_main.exists() and not force:
-                print(f"    Skipping (exists): {out_main.name}")
-            else:
-                print(f"    Writing {out_main.name}  ({n_samples} samples)")
-                write_hdf5(out_main, acc, gyr, qs_flipped, dt, mag=mag, movement_mask=movement)
+                print(f"    Writing {out_path.name}  ({n_samples} samples)")
+                write_hdf5(out_path, acc, gyr, qs_flipped, dt, mag=mag, movement_mask=movement)
 
 
 def dl_caruso(save_path, force_download: bool = False) -> None:
-    """Download + convert Caruso-Sassari into ``save_path/test/`` (all files are test)."""
-    _prepare(save_path, [(download, convert, SOURCE_DIR)], _test_role, force_download=force_download)
+    """Download + convert Caruso-Sassari flat into ``save_path``."""
+    _prepare_sources(save_path, [(download, convert)], force_download=force_download)
 
 
-BenchmarkCaruso_Inclination = _spec("BenchmarkCaruso_Inclination", "caruso", dl_caruso)
+caruso_dataset = Dataset("caruso", prepare=dl_caruso)
+
+BenchmarkCaruso_Inclination = _spec("BenchmarkCaruso_Inclination", caruso_dataset)

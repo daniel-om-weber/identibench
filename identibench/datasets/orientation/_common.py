@@ -3,66 +3,23 @@
 Holds the download/extract/HDF5 helpers used by each source preparer, the
 standardized channel layout (:data:`IMU_U_COLS` / :data:`IMU_Y_COLS`), the
 benchmark-spec factory (:func:`_spec`), the faithful masked per-source
-evaluation (:func:`riann_eval`), and the download-and-route driver
-(:func:`_prepare`) shared by the per-source loaders and the combined corpus.
+evaluation task (:class:`MaskedPooledInclination`), and the download-and-convert
+driver (:func:`_prepare_sources`) shared by the per-source preparers.
 """
 
-import shutil
-import tarfile
-import zipfile
-from collections import defaultdict
+from dataclasses import dataclass
 from pathlib import Path
 
 import h5py
 import numpy as np
-import requests
-from tqdm import tqdm
 
-from identibench.benchmark import BenchmarkSpecSimulation
-from identibench.metrics import _aligned_inclination_rad, aligned_inclination_rmse_deg
+from identibench.benchmark import BenchmarkSpec, EvalResult, pooled_scores_per_test_set
+from identibench.dataset import Dataset
+from identibench.metrics import _aligned_inclination_rad
 
 # Standardized channel layout written by :func:`write_hdf5` and read by the specs.
 IMU_U_COLS = ["acc_x", "acc_y", "acc_z", "gyr_x", "gyr_y", "gyr_z", "dt"]
 IMU_Y_COLS = ["q_w", "q_x", "q_y", "q_z"]
-
-
-def download_file(url: str, dest: Path, chunk_size: int = 8192, force: bool = False) -> Path:
-    """Streaming HTTP download with progress bar; skip if file exists unless ``force``."""
-    dest = Path(dest)
-    if dest.exists() and not force:
-        print(f"  Already downloaded: {dest.name}")
-        return dest
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    resp = requests.get(url, stream=True, timeout=(30, 300))
-    resp.raise_for_status()
-    total = int(resp.headers.get("content-length", 0))
-    with open(dest, "wb") as f, tqdm(total=total or None, unit="B", unit_scale=True, desc=dest.name) as bar:
-        for chunk in resp.iter_content(chunk_size=chunk_size):
-            f.write(chunk)
-            bar.update(len(chunk))
-    return dest
-
-
-def extract_archive(path: Path, dest: Path, members: list[str] | None = None) -> Path:
-    """Extract zip, tar, or tar.gz archive to dest directory."""
-    path, dest = Path(path), Path(dest)
-    dest.mkdir(parents=True, exist_ok=True)
-    if path.suffix == ".zip":
-        with zipfile.ZipFile(path) as zf:
-            targets = members or zf.namelist()
-            for m in targets:
-                zf.extract(m, dest)
-    elif path.name.endswith(".tar.gz") or path.name.endswith(".tgz") or path.suffix == ".tar":
-        mode = "r:gz" if (path.name.endswith(".tar.gz") or path.name.endswith(".tgz")) else "r"
-        with tarfile.open(path, mode) as tf:
-            if members:
-                for m in members:
-                    tf.extract(m, dest, filter="data")
-            else:
-                tf.extractall(dest, filter="data")
-    else:
-        raise ValueError(f"Unsupported archive format: {path}")
-    return dest
 
 
 def write_hdf5(
@@ -123,136 +80,91 @@ def fix_quaternion_flips(quat: np.ndarray, threshold: float = 1.0) -> np.ndarray
     return quat
 
 
+# ───────────────────────── faithful evaluation task ─────────────────────────
+
+
+def _masked_inclination_deg(model, fpath: Path, spec: BenchmarkSpec) -> np.ndarray:
+    """Run the model on one file and return its masked per-sample inclination errors.
+
+    Full-sequence free run with empty ``y_init``; the prediction tail is aligned to
+    the target length. The file's ``movement_mask`` is applied and non-finite errors
+    (ground-truth NaN gaps) are dropped. Returns the remaining errors in degrees.
+    """
+    with h5py.File(fpath, "r") as f:
+        u = np.stack([f[col][()] for col in spec.u_cols], axis=-1).astype(np.float32)
+        y = np.stack([f[col][()] for col in spec.y_cols], axis=-1).astype(np.float32)
+        attrs = dict(f.attrs)
+        mask = np.asarray(f["movement_mask"][()], dtype=np.float64) if "movement_mask" in f else np.ones(len(y))
+    y_pred = model(u, y[:0], attrs)
+    incl = _aligned_inclination_rad(y_pred[-len(y) :], y)  # radians, NaN where invalid
+    m = min(len(incl), len(mask))  # a model returning fewer samples shortens incl below the mask
+    incl, mask = incl[:m], mask[:m]
+    return incl[np.isfinite(incl) & (mask > 0.5)] * 180.0 / np.pi
+
+
+@dataclass(frozen=True)
+class MaskedPooledInclination:
+    """Faithful RIANN evaluation as a task: masked, sample-pooled, first-sample-aligned
+    inclination error in degrees.
+
+    Each named test set (= source dataset) is scored as one sample pool with the RMS
+    error and its ``percentile``-th percentile; a cross-set ``"all"`` pool is always
+    appended and is the headline.
+    """
+
+    percentile: float = 99.0
+
+    def _pool_scores(self, deg: np.ndarray) -> dict[str, float]:
+        return {
+            "incl_rmse_deg": float(np.sqrt(np.mean(deg**2))),
+            f"incl_p{self.percentile:g}_deg": float(np.percentile(deg, self.percentile)),
+        }
+
+    def __call__(self, spec: BenchmarkSpec, model) -> EvalResult:
+        scores = pooled_scores_per_test_set(
+            spec, lambda f: _masked_inclination_deg(model, f, spec), self._pool_scores, all_set="all"
+        )
+        return EvalResult(scores=scores, headline=("all", "incl_rmse_deg"))
+
+
 # ───────────────────────── benchmark spec factory ─────────────────────────
 
 
-def _spec(name: str, dataset_id: str, download_func) -> BenchmarkSpecSimulation:
-    """Build the orientation benchmark spec shared by every source.
+def _spec(name: str, dataset: Dataset) -> BenchmarkSpec:
+    """Build the per-source orientation benchmark spec: every file of the source
+    is one named test set, no training data is defined.
 
-    The headline ``metric_func`` is the first-sample-aligned (unmasked)
-    inclination RMSE; the faithful masked + 99th-percentile per-source numbers
-    come from :func:`riann_eval` via ``custom_test_evaluation``.
+    The task is the faithful masked + sample-pooled evaluation; the headline is
+    the cross-set ``"all"`` pool's ``incl_rmse_deg``.
     """
-    return BenchmarkSpecSimulation(
+    return BenchmarkSpec(
         name=name,
-        dataset_id=dataset_id,
         u_cols=IMU_U_COLS,
         y_cols=IMU_Y_COLS,
-        metric_func=aligned_inclination_rmse_deg,
-        custom_test_evaluation=riann_eval,
-        download_func=download_func,
-        sampling_time=None,  # per-sample dt is the 7th u_col; rate is not constant across the corpus
-        init_window=0,  # full-sequence orientation simulation
+        train=[],
+        valid=[],
+        test_sets={dataset.dataset_id: [(dataset, "*.hdf5")]},
+        task=MaskedPooledInclination(),
     )
-
-
-# ───────────────────────── faithful evaluation ─────────────────────────
-
-
-def _source_of(fpath) -> str:
-    """Recover the source dataset name from a routed filename ``<Source>__<stem>``."""
-    stem = Path(fpath).name
-    return stem.split("__", 1)[0] if "__" in stem else Path(fpath).parent.name
-
-
-def riann_eval(test_results, spec) -> dict:
-    """Faithful RIANN evaluation: masked + first-sample-aligned inclination
-    error and its 99th percentile, broken down per source dataset.
-
-    ``test_results`` is the list of ``(y_pred, y_true)`` tuples in
-    ``spec.test_files`` order; we re-open each file to recover ``movement_mask``
-    (and to drop ground-truth NaN gaps). Returns ``{"<src>/incl_rmse_deg": …,
-    "<src>/incl_p99_deg": …, "all/incl_rmse_deg": …, "all/incl_p99_deg": …}``.
-    """
-    files = list(spec.test_files)
-    if len(files) != len(test_results):
-        # Loader skips unreadable files, which would misalign the zip. Bail to a
-        # single pooled "all" score rather than mis-attributing per-source numbers.
-        files = [None] * len(test_results)
-
-    per_source: dict[str, list[np.ndarray]] = defaultdict(list)
-    for (y_pred, y_true), fpath in zip(test_results, files):
-        incl = _aligned_inclination_rad(y_pred, y_true)  # radians, NaN where invalid
-        mask = np.ones(len(incl))
-        if fpath is not None:
-            try:
-                with h5py.File(fpath, "r") as f:
-                    if "movement_mask" in f:
-                        mask = np.asarray(f["movement_mask"][()], dtype=np.float64)
-            except OSError:
-                pass
-        m = min(len(incl), len(mask))
-        incl, mask = incl[:m], mask[:m]
-        valid = np.isfinite(incl) & (mask > 0.5)
-        source = _source_of(fpath) if fpath is not None else "all"
-        per_source[source].append(incl[valid])
-
-    scores: dict[str, float] = {}
-    pooled: list[np.ndarray] = []
-    for source, chunks in sorted(per_source.items()):
-        v = np.concatenate(chunks) if chunks else np.empty(0)
-        if v.size == 0:
-            continue
-        deg = v * 180.0 / np.pi
-        scores[f"{source}/incl_rmse_deg"] = float(np.sqrt(np.mean(deg**2)))
-        scores[f"{source}/incl_p99_deg"] = float(np.percentile(deg, 99))
-        pooled.append(deg)
-    if pooled:
-        deg = np.concatenate(pooled)
-        scores["all/incl_rmse_deg"] = float(np.sqrt(np.mean(deg**2)))
-        scores["all/incl_p99_deg"] = float(np.percentile(deg, 99))
-    return scores
 
 
 # ───────────────────────── download / materialization ─────────────────────────
 
 
-def _test_role(source: str, fname: str) -> str:
-    """Role function for a standalone per-source dataset: every file is test.
+def _prepare_sources(save_path, preparers, force_download: bool = False) -> None:
+    """Download + convert the given sources flat into ``save_path``.
 
-    ``source``/``fname`` are unused here but kept to honor the ``role_fn(source,
-    fname)`` calling convention :func:`_prepare` shares with the per-source
-    splitter (e.g. ``riann._riann_role``).
-    """
-    return "test"
-
-
-def _prepare(save_path, preparers, role_fn, force_download: bool = False) -> None:
-    """Download + convert the given sources, then route every file into
-    ``save_path/<role>/<Source>__<stem>.hdf5``.
-
-    ``preparers`` is a list of ``(download_fn, convert_fn, source_dir)`` triples
-    (each source module exposes these). Raw archives are cached in a shared
-    ``_orientation_raw`` dir next to the dataset so they are not re-downloaded
-    across the per-source and combined datasets. Conversion goes to a private
-    staging dir which is removed afterwards. With ``force_download=True`` the
-    routed train/valid/test dirs are cleared first and every source is
-    re-downloaded and re-converted from scratch.
+    ``preparers`` is a list of ``(download_fn, convert_fn)`` pairs (each source
+    module exposes these). Raw archives are cached in a shared
+    ``_orientation_raw`` dir next to the dataset directory so they survive
+    re-preparation and are shared across the orientation datasets; with
+    ``force_download=True`` they are re-downloaded as well.
     """
     save_path = Path(save_path)
     raw = save_path.parent / "_orientation_raw"
-    stage = save_path / "_stage"
     raw.mkdir(parents=True, exist_ok=True)
-    if force_download:
-        for role in ("train", "valid", "test"):
-            shutil.rmtree(save_path / role, ignore_errors=True)
-    stage.mkdir(parents=True, exist_ok=True)
+    save_path.mkdir(parents=True, exist_ok=True)
 
-    for download_fn, convert_fn, _ in preparers:
+    for download_fn, convert_fn in preparers:
         download_fn(raw, force=force_download)
-        convert_fn(raw, stage, force=force_download)
-
-    wanted = {source_dir for _, _, source_dir in preparers}  # e.g. excludes Caruso-Sassari_orig
-    for src_dir in sorted(p for p in stage.iterdir() if p.is_dir()):
-        source = src_dir.name
-        if source not in wanted:
-            continue
-        for f in sorted(src_dir.glob("*.hdf5")):
-            role = role_fn(source, f.name)
-            if role is None:
-                continue
-            dest_dir = save_path / role
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(f), str(dest_dir / f"{source}__{f.name}"))
-
-    shutil.rmtree(stage, ignore_errors=True)
+        convert_fn(raw, save_path, force=force_download)

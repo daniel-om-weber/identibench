@@ -8,11 +8,14 @@ __all__ = [
     "write_array",
     "iodata_to_hdf5",
     "dataset_to_hdf5",
-    "download",
+    "download_file",
+    "extract_archive",
 ]
 
 import os
+import tarfile
 import warnings
+import zipfile
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, NamedTuple
@@ -21,6 +24,7 @@ import h5py
 import numpy as np
 import requests
 from nonlinear_benchmarks import Input_output_data
+from tqdm import tqdm
 
 
 class Sequence(NamedTuple):
@@ -35,10 +39,10 @@ def get_default_data_root() -> Path:
     """
     Returns the default root directory for datasets.
 
-    Checks the 'IDENTIBENCH_DATA_ROOT' environment variable first,
-    otherwise defaults to '~/.identibench_data'.
+    Checks the 'IDENTIBENCH_DATA_ROOT' environment variable first (an empty
+    value counts as unset), otherwise defaults to '~/.identibench_data'.
     """
-    return Path(os.environ.get("IDENTIBENCH_DATA_ROOT", Path.home() / ".identibench_data"))
+    return Path(os.environ.get("IDENTIBENCH_DATA_ROOT") or Path.home() / ".identibench_data")
 
 
 def _dummy_dataset_loader(
@@ -100,14 +104,10 @@ def _load_sequences_from_files(
         raise ValueError("stp_sz must be provided if win_sz is provided")
 
     for file_path in file_paths:
-        try:
-            with h5py.File(file_path, "r") as f:
-                u_data = np.stack([f[col][()] for col in u_cols], axis=-1).astype(np.float32)
-                y_data = np.stack([f[col][()] for col in y_cols], axis=-1).astype(np.float32)
-                attrs = dict(f.attrs)
-        except Exception as e:
-            warnings.warn(f"Error reading {file_path}: {e}", RuntimeWarning)
-            continue
+        with h5py.File(file_path, "r") as f:
+            u_data = np.stack([f[col][()] for col in u_cols], axis=-1).astype(np.float32)
+            y_data = np.stack([f[col][()] for col in y_cols], axis=-1).astype(np.float32)
+            attrs = dict(f.attrs)
 
         if win_sz is None:
             yield Sequence(u_data, y_data, attrs)
@@ -233,24 +233,54 @@ def dataset_to_hdf5(
             iodata_to_hdf5(iodata, save_path / subset, f"{subset}_{idx}")
 
 
-def download(
-    url: str,  # url to file to download
-    target_dir: Path = Path("."),  # directory the file is downloaded to
+def download_file(
+    url: str,  # URL of the file to download.
+    dest: Path,  # Local file path the download is written to.
+    chunk_size: int = 8192,  # Streaming chunk size in bytes.
+    force: bool = False,  # Re-download even if ``dest`` already exists.
+    headers: dict[str, str] | None = None,  # Optional HTTP request headers (e.g. User-Agent, Referer).
 ) -> Path:
-    """Downloads a file to a target directory, skipping it if already present.
-
-    Args:
-        url: URL of the file to download. The basename of the URL is used as the
-            local file name.
-        target_dir: Directory the file is downloaded to.
+    """Streaming HTTP download with progress bar; skip if file exists unless ``force``.
 
     Returns:
         Path to the downloaded (or pre-existing) file.
     """
-    p_name = Path(target_dir) / Path(url).name
-    if p_name.is_file():
-        return p_name
-    response = requests.get(url)
-    with open(p_name, "wb") as file:
-        file.write(response.content)
-    return p_name
+    dest = Path(dest)
+    if dest.exists() and not force:
+        print(f"  Already downloaded: {dest.name}")
+        return dest
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    resp = requests.get(url, stream=True, timeout=(30, 300), headers=headers)
+    resp.raise_for_status()
+    total = int(resp.headers.get("content-length", 0))
+    with open(dest, "wb") as f, tqdm(total=total or None, unit="B", unit_scale=True, desc=dest.name) as bar:
+        for chunk in resp.iter_content(chunk_size=chunk_size):
+            f.write(chunk)
+            bar.update(len(chunk))
+    return dest
+
+
+def extract_archive(
+    path: Path,  # Archive file to extract (``.zip``, ``.tar``, ``.tar.gz``/``.tgz``).
+    dest: Path,  # Destination directory; created if it does not exist.
+    members: list[str] | None = None,  # Optional subset of archive members to extract.
+) -> Path:
+    """Extract zip, tar, or tar.gz archive to dest directory."""
+    path, dest = Path(path), Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    if path.suffix == ".zip":
+        with zipfile.ZipFile(path) as zf:
+            targets = members or zf.namelist()
+            for m in targets:
+                zf.extract(m, dest)
+    elif path.name.endswith(".tar.gz") or path.name.endswith(".tgz") or path.suffix == ".tar":
+        mode = "r:gz" if (path.name.endswith(".tar.gz") or path.name.endswith(".tgz")) else "r"
+        with tarfile.open(path, mode) as tf:
+            if members:
+                for m in members:
+                    tf.extract(m, dest, filter="data")
+            else:
+                tf.extractall(dest, filter="data")
+    else:
+        raise ValueError(f"Unsupported archive format: {path}")
+    return dest
