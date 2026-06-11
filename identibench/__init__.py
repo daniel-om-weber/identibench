@@ -13,7 +13,7 @@ from .benchmark import (
     aggregate_benchmark_results,
 )
 from .dataset import Dataset
-from .utils import Sequence
+from .utils import Sequence, data_root
 from . import metrics
 from . import datasets
 
@@ -136,6 +136,7 @@ __all__ = [
     "benchmark_results_to_dataframe",
     "aggregate_benchmark_results",
     "Sequence",
+    "data_root",
     # Subpackages / submodules
     "metrics",
     "datasets",

@@ -1,5 +1,8 @@
 """Tests for the core benchmark pipeline."""
 
+import os
+from pathlib import Path
+
 import h5py
 import numpy as np
 import pandas as pd
@@ -20,7 +23,7 @@ from identibench.benchmark import (
 )
 from identibench.dataset import Dataset
 from identibench.metrics import rmse
-from identibench.utils import _dummy_dataset_loader, _load_sequences_from_files
+from identibench.utils import _dummy_dataset_loader, _load_sequences_from_files, data_root, get_default_data_root
 
 
 # --- Fixtures ---
@@ -302,6 +305,77 @@ class TestBenchmarkSpecResolver:
             task=Simulation(metric=rmse),
         )
         assert [ds.dataset_id for ds in spec.datasets] == ["a", "b", "c"]
+
+    def test_train_and_valid_files_symmetric_with_test_files(self, flat_dataset):
+        spec = BenchmarkSpec(
+            name="TestRoleAccessors",
+            u_cols=["u0"],
+            y_cols=["y0"],
+            train=[(flat_dataset, "c.hdf5"), (flat_dataset, "d.hdf5")],
+            valid=[(flat_dataset, "sub/*.hdf5")],
+            test_sets={"s": [(flat_dataset, "c.hdf5")]},
+            task=Simulation(metric=rmse),
+        )
+        assert spec.train_files() == [flat_dataset.path / "c.hdf5", flat_dataset.path / "d.hdf5"]
+        assert spec.valid_files() == [flat_dataset.path / "sub" / "e.hdf5", flat_dataset.path / "sub" / "f.hdf5"]
+
+    def test_role_files_empty_for_all_test_spec(self, flat_dataset):
+        spec = BenchmarkSpec(
+            name="TestAllTest",
+            u_cols=["u0"],
+            y_cols=["y0"],
+            train=[],
+            valid=[],
+            test_sets={"s": [(flat_dataset, "c.hdf5")]},
+            task=Simulation(metric=rmse),
+        )
+        assert spec.train_files() == []
+        assert spec.valid_files() == []
+
+    @pytest.mark.parametrize(
+        ("train", "valid", "trainable"),
+        [
+            ([("ds", "c.hdf5")], [("ds", "d.hdf5")], True),
+            ([], [("ds", "d.hdf5")], False),
+            ([("ds", "c.hdf5")], [], False),
+            ([], [], False),
+        ],
+    )
+    def test_is_trainable(self, flat_dataset, train, valid, trainable):
+        patterns = lambda group: [(flat_dataset, glob) for _, glob in group]  # noqa: E731
+        spec = BenchmarkSpec(
+            name="TestTrainable",
+            u_cols=["u0"],
+            y_cols=["y0"],
+            train=patterns(train),
+            valid=patterns(valid),
+            test_sets={"s": [(flat_dataset, "c.hdf5")]},
+            task=Simulation(metric=rmse),
+        )
+        assert spec.is_trainable is trainable
+
+
+class TestDataRoot:
+    def test_override_and_restore(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("IDENTIBENCH_DATA_ROOT", "/elsewhere")
+        with data_root(tmp_path) as root:
+            assert root == tmp_path
+            assert get_default_data_root() == tmp_path
+            assert Dataset("abc", prepare=None).path == tmp_path / "abc"
+        assert get_default_data_root() == Path("/elsewhere")
+
+    def test_restores_unset_env(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("IDENTIBENCH_DATA_ROOT", raising=False)
+        with data_root(tmp_path):
+            assert get_default_data_root() == tmp_path
+        assert os.environ.get("IDENTIBENCH_DATA_ROOT") is None
+
+    def test_restores_on_exception(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("IDENTIBENCH_DATA_ROOT", "/elsewhere")
+        with pytest.raises(RuntimeError, match="boom"):
+            with data_root(tmp_path):
+                raise RuntimeError("boom")
+        assert get_default_data_root() == Path("/elsewhere")
 
     def test_empty_test_sets_rejected(self):
         with pytest.raises(ValueError, match="test_sets"):

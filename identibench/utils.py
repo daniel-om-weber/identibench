@@ -3,6 +3,7 @@
 __all__ = [
     "Sequence",
     "get_default_data_root",
+    "data_root",
     "hdf_files_from_path",
     "write_dataset",
     "write_array",
@@ -17,6 +18,7 @@ import tarfile
 import warnings
 import zipfile
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, NamedTuple
 
@@ -43,6 +45,27 @@ def get_default_data_root() -> Path:
     value counts as unset), otherwise defaults to '~/.identibench_data'.
     """
     return Path(os.environ.get("IDENTIBENCH_DATA_ROOT") or Path.home() / ".identibench_data")
+
+
+@contextmanager
+def data_root(path: Path | str) -> Iterator[Path]:
+    """Temporarily points the data root at ``path`` for the enclosed block.
+
+    The explicit injection point for tests and scripts that work against a
+    local data directory instead of ``~/.identibench_data``. Implemented by
+    setting the ``IDENTIBENCH_DATA_ROOT`` environment variable (restored on
+    exit), so the override is process-wide and also reaches spawned preparer
+    subprocesses. Not safe for concurrent use from multiple threads.
+    """
+    prev = os.environ.get("IDENTIBENCH_DATA_ROOT")
+    os.environ["IDENTIBENCH_DATA_ROOT"] = str(path)
+    try:
+        yield Path(path)
+    finally:
+        if prev is None:
+            os.environ.pop("IDENTIBENCH_DATA_ROOT", None)
+        else:
+            os.environ["IDENTIBENCH_DATA_ROOT"] = prev
 
 
 def _dummy_dataset_loader(

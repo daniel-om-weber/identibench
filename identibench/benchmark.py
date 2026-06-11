@@ -374,6 +374,16 @@ class BenchmarkSpec:
         groups = [self.train, self.valid, self.train_valid or [], *self.test_sets.values()]
         return sorted({ds for group in groups for ds, _ in group}, key=lambda d: d.dataset_id)
 
+    @property
+    def is_trainable(self) -> bool:
+        """Whether the benchmark defines both training and validation data.
+
+        ``False`` for all-test evaluation specs (empty ``train`` or ``valid``),
+        which consumers building a train/valid split should reject up front
+        instead of failing on an empty file list downstream.
+        """
+        return bool(self.train and self.valid)
+
     def resolve(self, patterns: Patterns) -> list[Path]:
         """Resolves ``(dataset, glob)`` patterns to a sorted, deduplicated file list.
 
@@ -394,6 +404,20 @@ class BenchmarkSpec:
                 )
             files.update(matches)
         return sorted(files)
+
+    def train_files(self) -> list[Path]:
+        """Resolves the training patterns to a sorted, deduplicated file list.
+
+        ``[]`` when the benchmark defines no training data (see `is_trainable`).
+        """
+        return self.resolve(self.train)
+
+    def valid_files(self) -> list[Path]:
+        """Resolves the validation patterns to a sorted, deduplicated file list.
+
+        ``[]`` when the benchmark defines no validation data (see `is_trainable`).
+        """
+        return self.resolve(self.valid)
 
     def test_set_files(self) -> dict[str, list[Path]]:
         """Resolves the named test sets to file lists, in declared order."""

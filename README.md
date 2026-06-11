@@ -506,7 +506,8 @@ direct interaction or adding new datasets.
   evaluate whole).
 - **Directory Structure:** Datasets are stored under a root directory
   (default: `~/.identibench_data`, configurable via the
-  `IDENTIBENCH_DATA_ROOT` environment variable) as
+  `IDENTIBENCH_DATA_ROOT` environment variable, or temporarily via the
+  `with idb.data_root(path): ...` context manager — handy in tests) as
   `DATA_ROOT / [dataset_id] / ...` — the layout below the dataset
   directory is whatever the preparer writes (most use `train/`, `valid/`,
   `test/` subdirectories; the orientation datasets are flat).
