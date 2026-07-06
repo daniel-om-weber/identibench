@@ -6,6 +6,7 @@ __all__ = [
     "Simulation",
     "Prediction",
     "WindowedEstimation",
+    "GridwiseEstimation",
     "EvalResult",
     "TestSetScores",
     "TrainingContext",
@@ -310,6 +311,81 @@ class WindowedEstimation:
         if not preds:
             return np.empty(0)
         return np.abs(np.asarray(preds) - np.asarray(trues))
+
+
+@dataclass(frozen=True)
+class GridwiseEstimation:
+    """Full-file simulation task scored at a fixed grid.
+
+    Parameters:
+        window_sec: float
+        
+        step_sec: float
+        
+    The model is called once per file (free-run) with the input and query time points and returns its results at the query points.
+
+    Model contract: ``model(u_full, y_init, attrs, t_query) -> (y_estimate) at t_query`` — ``y_init`` is always empty.
+    """
+
+    window_sec: float
+    step_sec: float
+
+    def __post_init__(self):
+        if self.window_sec <= 0:
+            raise ValueError("window_sec must be > 0")
+        if self.step_sec <= 0:
+            raise ValueError("step_sec must be > 0")
+        
+    def _pool_window_stats(self, errors: np.ndarray) -> dict[str, float]:
+        """Same pooled stats as :meth:`WindowedEstimation._pool_stats`."""
+        return {
+            "mae": float(np.mean(errors)),
+            "medae": float(np.median(errors)),
+            "std": float(np.std(errors)),
+            "max": float(np.max(errors)),
+        }
+
+    def _preds_and_targets(self, model, seq):
+        fs = float(seq.attrs["fs"])
+        win_samples = int(round(self.window_sec * fs))
+        step = max(1, int(round(self.step_sec * fs)))
+        if win_samples <= 0:
+            raise ValueError(f"window_sec={self.window_sec!r} rounds to <1 sample at fs={fs}")
+        # Centered grid, no edge padding: point i sits at i*step + ctx_half, so every
+        # point keeps a full ctx-sample window inside the file (first/last ctx_half
+        # samples are never used as eval targets).
+        win_half = win_samples // 2
+        n = max(0, (seq.u.shape[0] - win_samples) // step + 1)
+        if n == 0:
+            return np.empty(0), np.empty(0)
+        eval_centers = np.arange(n) * step + win_half
+        centers_sec = eval_centers / fs
+        targets = seq.y[eval_centers, 0]
+        preds = model(seq.u, seq.y[:0], seq.attrs, centers_sec)
+        return preds, targets
+
+    def __call__(self, spec, model) -> EvalResult:
+        preds_by_set, labels_by_set, scores = {}, {}, {}
+        for set_name, files in spec.test_set_files().items():
+            preds_chunks, trues_chunks = [], []
+            for fpath in files:
+                for seq in _load_sequences_from_files([fpath], spec.u_cols, spec.y_cols):
+                    preds, trues = self._preds_and_targets(model, seq)
+                    if preds.size:
+                        preds_chunks.append(preds)
+                        trues_chunks.append(trues)
+            preds = np.concatenate(preds_chunks) if preds_chunks else np.empty(0)
+            trues = np.concatenate(trues_chunks) if trues_chunks else np.empty(0)
+            if preds.size == 0:
+                raise ValueError(f"{spec.name}: test set {set_name!r} produced no error samples")
+            preds_by_set[set_name] = preds
+            labels_by_set[set_name] = trues
+            scores[set_name] = self._pool_window_stats(np.abs(preds - trues))
+        return EvalResult(
+            scores=scores,
+            headline=(next(iter(spec.test_sets)), "mae"),
+            diagnostics={"predictions": preds_by_set, "labels": labels_by_set},
+        )
 
 
 def _validate_patterns(spec_name: str, label: str, patterns: Patterns) -> None:

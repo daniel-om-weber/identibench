@@ -7,6 +7,7 @@ from .benchmark import (
     Simulation,
     Prediction,
     WindowedEstimation,
+    GridwiseEstimation,
     EvalResult,
     TrainingContext,
     benchmark_results_to_dataframe,
@@ -72,6 +73,10 @@ from .datasets.ias import (
     BenchmarkParallelGearbox_Simulation,
     BenchmarkPlanetaryGearbox_Simulation,
     BenchmarkGasFoilBearing_Simulation,
+    BenchmarkBallBearing_GridwiseEstimation,
+    BenchmarkParallelGearbox_GridwiseEstimation,
+    BenchmarkPlanetaryGearbox_GridwiseEstimation,
+    BenchmarkGasFoilBearing_GridwiseEstimation,
     ias_benchmarks,
 )
 
@@ -131,6 +136,7 @@ __all__ = [
     "Simulation",
     "Prediction",
     "WindowedEstimation",
+    "GridwiseEstimation",
     "EvalResult",
     "TrainingContext",
     "benchmark_results_to_dataframe",
@@ -191,4 +197,8 @@ __all__ = [
     "BenchmarkParallelGearbox_Simulation",
     "BenchmarkPlanetaryGearbox_Simulation",
     "BenchmarkGasFoilBearing_Simulation",
+    "BenchmarkBallBearing_GridwiseEstimation",
+    "BenchmarkParallelGearbox_GridwiseEstimation",
+    "BenchmarkPlanetaryGearbox_GridwiseEstimation",
+    "BenchmarkGasFoilBearing_GridwiseEstimation",
 ]

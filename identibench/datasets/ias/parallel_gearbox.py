@@ -16,7 +16,7 @@ import pandas as pd
 from scipy.interpolate import interp1d
 from tqdm import tqdm
 
-from ...benchmark import BenchmarkSpec, Simulation, WindowedEstimation
+from ...benchmark import BenchmarkSpec, Simulation, WindowedEstimation, GridwiseEstimation
 from ...dataset import Dataset
 from ...metrics import mae
 from ._common import (
@@ -213,6 +213,12 @@ BenchmarkParallelGearbox_Estimation = BenchmarkSpec(
     # window_sec = largest window any upstream method needed (Ref-FFT-LSTM 2.13 s),
     # rounded to 2.2 s so every method has enough samples; smaller ones crop/decimate. See ias/__init__.
     task=WindowedEstimation(window_sec=2.2),
+    **_parallel_gearbox,
+)
+
+BenchmarkParallelGearbox_GridwiseEstimation = BenchmarkSpec(
+    name="BenchmarkParallelGearbox_GridwiseEstimation",
+    task=GridwiseEstimation(window_sec=3.0, step_sec=0.1),
     **_parallel_gearbox,
 )
 

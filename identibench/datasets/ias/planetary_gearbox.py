@@ -14,7 +14,7 @@ import numpy as np
 import scipy.io
 from tqdm import tqdm
 
-from ...benchmark import BenchmarkSpec, Simulation, WindowedEstimation
+from ...benchmark import BenchmarkSpec, Simulation, WindowedEstimation, GridwiseEstimation
 from ...dataset import Dataset
 from ...metrics import mae
 from ._common import (
@@ -108,6 +108,12 @@ BenchmarkPlanetaryGearbox_Estimation = BenchmarkSpec(
     # window_sec = largest window any upstream method needed (Ref-FFT-LSTM 2.70 s),
     # rounded to 2.7 s; the per-file fs (this dataset varies it) sizes the window in samples. See ias/__init__.
     task=WindowedEstimation(window_sec=2.7),
+    **_planetary_gearbox,
+)
+
+BenchmarkPlanetaryGearbox_GridwiseEstimation = BenchmarkSpec(
+    name="BenchmarkPlanetaryGearbox_GridwiseEstimation",
+    task=GridwiseEstimation(window_sec=3.0, step_sec=0.1),
     **_planetary_gearbox,
 )
 

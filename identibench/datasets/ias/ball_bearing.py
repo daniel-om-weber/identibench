@@ -14,7 +14,7 @@ import numpy as np
 import scipy.io
 from tqdm import tqdm
 
-from ...benchmark import BenchmarkSpec, Simulation, WindowedEstimation
+from ...benchmark import BenchmarkSpec, Simulation, WindowedEstimation, GridwiseEstimation
 from ...dataset import Dataset
 from ...metrics import mae
 from ._common import (
@@ -93,9 +93,15 @@ _ball_bearing = dict(
 
 BenchmarkBallBearing_Estimation = BenchmarkSpec(
     name="BenchmarkBallBearing_Estimation",
-    # window_sec = largest window any upstream method needed (SIG-GRU 1.96 s, ViBES 1.84 s),
+    # window_sec = largest window any upstream method needs (SIG-GRU 1.96 s, ViBES 1.84 s),
     # rounded to 2.0 s so every method has enough samples; smaller ones crop/decimate. See ias/__init__.
     task=WindowedEstimation(window_sec=2.0),
+    **_ball_bearing,
+)
+
+BenchmarkBallBearing_GridwiseEstimation = BenchmarkSpec(
+    name="BenchmarkBallBearing_GridwiseEstimation",
+    task=GridwiseEstimation(window_sec=3.0, step_sec=0.1),
     **_ball_bearing,
 )
 
