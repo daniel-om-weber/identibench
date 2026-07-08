@@ -62,28 +62,32 @@ dataset is recorded at 200 kHz); the gas foil bearing is hosted on a single
 TU-Berlin cloud link.
 """
 
-from ...benchmark import WindowedEstimation
+from ...benchmark import WindowedEstimation, GridwiseEstimation
 from .ball_bearing import (
     BenchmarkBallBearing_Estimation,
     BenchmarkBallBearing_Simulation,
+    BenchmarkBallBearing_GridwiseEstimation,
     ball_bearing_dataset,
     dl_ball_bearing,
 )
 from .gas_foil_bearing import (
     BenchmarkGasFoilBearing_Estimation,
     BenchmarkGasFoilBearing_Simulation,
+    BenchmarkGasFoilBearing_GridwiseEstimation,
     dl_gas_foil_bearing,
     gas_foil_bearing_dataset,
 )
 from .parallel_gearbox import (
     BenchmarkParallelGearbox_Estimation,
     BenchmarkParallelGearbox_Simulation,
+    BenchmarkParallelGearbox_GridwiseEstimation,
     dl_parallel_gearbox,
     parallel_gearbox_dataset,
 )
 from .planetary_gearbox import (
     BenchmarkPlanetaryGearbox_Estimation,
     BenchmarkPlanetaryGearbox_Simulation,
+    BenchmarkPlanetaryGearbox_GridwiseEstimation,
     dl_planetary_gearbox,
     planetary_gearbox_dataset,
 )
@@ -99,10 +103,15 @@ ias_benchmarks = {
     "ParallelGearbox_Simulation": BenchmarkParallelGearbox_Simulation,
     "PlanetaryGearbox_Simulation": BenchmarkPlanetaryGearbox_Simulation,
     "GasFoilBearing_Simulation": BenchmarkGasFoilBearing_Simulation,
+    "ParallelGearbox_GridwiseEstimation": BenchmarkParallelGearbox_GridwiseEstimation,
+    "PlanetaryGearbox_GridwiseEstimation": BenchmarkPlanetaryGearbox_GridwiseEstimation,
+    "GasFoilBearing_GridwiseEstimation": BenchmarkGasFoilBearing_GridwiseEstimation,
+    "BallBearing_GridwiseEstimation": BenchmarkBallBearing_GridwiseEstimation,
 }
 
 __all__ = [
     "WindowedEstimation",
+    "GridwiseEstimation",
     "ball_bearing_dataset",
     "parallel_gearbox_dataset",
     "planetary_gearbox_dataset",
@@ -119,5 +128,9 @@ __all__ = [
     "BenchmarkParallelGearbox_Simulation",
     "BenchmarkPlanetaryGearbox_Simulation",
     "BenchmarkGasFoilBearing_Simulation",
+    "BenchmarkParallelGearbox_GridwiseEstimation",
+    "BenchmarkPlanetaryGearbox_GridwiseEstimation",
+    "BenchmarkGasFoilBearing_GridwiseEstimation",
+    "BenchmarkBallBearing_GridwiseEstimation",
     "ias_benchmarks",
 ]
