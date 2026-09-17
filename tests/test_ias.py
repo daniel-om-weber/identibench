@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 import identibench as idb
-from identibench.datasets.ias import WindowedEstimation, _common
+from identibench.datasets.ias import GridwiseEstimation, WindowedEstimation, _common
 from identibench.datasets.ias.ball_bearing import (
     BenchmarkBallBearing_Estimation,
     BenchmarkBallBearing_Simulation,
@@ -214,6 +214,71 @@ def test_run_simulation_benchmark_on_synthetic_ias_dataset(tmp_path, monkeypatch
     assert result["test_sets"]["wear"]["mae"] == pytest.approx(9.0, abs=1e-5)
 
 
+def test_run_gridwise_benchmark_on_synthetic_ias_dataset(tmp_path, monkeypatch):
+    monkeypatch.setenv("IDENTIBENCH_DATA_ROOT", str(tmp_path))
+    _build_synthetic_ias_dataset(tmp_path / "ball_bearing")
+    # 100-sample files at fs=1000 -> a 0.05 s window / 0.01 s step gives 6 query points/file.
+    spec = dataclasses.replace(
+        BenchmarkBallBearing_Estimation,
+        task=GridwiseEstimation(window_sec=0.05, step_sec=0.01),
+        test_sets=_narrowed_test_sets(),
+    )
+
+    def build_model(context):
+        def model(u, y_init, attrs):
+            assert y_init.shape == (0, 1)
+            t_query = attrs["t_query"]
+            # Returns a plain Python list, not an ndarray -- exercises the list-coercion fix.
+            return [0.0] * len(t_query)
+
+        return model
+
+    result = idb.run_benchmark(spec, build_model, seed=0)
+
+    # Headline = basic pooled MAE; the zero-model's per-query error is the constant IAS.
+    assert result["metric_name"] == "mae"
+    assert result["metric_score"] == pytest.approx(5.0, abs=1e-5)
+    assert set(result["test_sets"]) == {"basic", "wear", "disturbed_15dB"}
+    assert result["test_sets"]["wear"]["mae"] == pytest.approx(9.0, abs=1e-5)
+    basic = result["test_sets"]["basic"]
+    assert set(basic) == {"mae", "medae", "std", "max"}
+    assert basic["std"] == pytest.approx(0.0, abs=1e-5)  # constant IAS -> identical errors
+
+
+def test_gridwise_estimation_rejects_wrong_shaped_predictions(tmp_path, monkeypatch):
+    monkeypatch.setenv("IDENTIBENCH_DATA_ROOT", str(tmp_path))
+    _build_synthetic_ias_dataset(tmp_path / "ball_bearing")
+    spec = dataclasses.replace(
+        BenchmarkBallBearing_Estimation,
+        task=GridwiseEstimation(window_sec=0.05, step_sec=0.01),
+        test_sets=_narrowed_test_sets(),
+    )
+
+    def build_model(context):
+        # Wrong length: one prediction regardless of how many query points were asked for.
+        return lambda u, y_init, attrs: np.zeros(1)
+
+    with pytest.raises(ValueError, match="expected"):
+        idb.run_benchmark(spec, build_model, seed=0)
+
+
+def test_gridwise_estimation_rejects_multi_output_specs(tmp_path, monkeypatch):
+    monkeypatch.setenv("IDENTIBENCH_DATA_ROOT", str(tmp_path))
+    _build_synthetic_ias_dataset(tmp_path / "ball_bearing")
+    spec = dataclasses.replace(
+        BenchmarkBallBearing_Estimation,
+        task=GridwiseEstimation(window_sec=0.05, step_sec=0.01),
+        test_sets=_narrowed_test_sets(),
+        y_cols=["IAS", "Extra"],
+    )
+
+    def build_model(context):
+        return lambda u, y_init, attrs: np.zeros(len(attrs["t_query"]))
+
+    with pytest.raises(ValueError, match="one y_col"):
+        idb.run_benchmark(spec, build_model, seed=0)
+
+
 def test_missing_wear_dir_fails_loudly(tmp_path, monkeypatch):
     """Declaring `wear` against a dataset without the condition must raise, not skip."""
     monkeypatch.setenv("IDENTIBENCH_DATA_ROOT", str(tmp_path))
@@ -268,5 +333,20 @@ def test_registration():
         assert sim.test_sets == est.test_sets
         assert sim.u_cols == est.u_cols
         assert sim.y_cols == est.y_cols == ["IAS"]
+    # Each dataset also has a GridwiseEstimation sibling sharing the same data.
+    for key in (
+        "BallBearing_GridwiseEstimation",
+        "ParallelGearbox_GridwiseEstimation",
+        "PlanetaryGearbox_GridwiseEstimation",
+        "GasFoilBearing_GridwiseEstimation",
+    ):
+        assert key in idb.simulation_benchmarks
+        assert key in idb.ias_benchmarks
+        spec = idb.ias_benchmarks[key]
+        assert isinstance(spec.task, GridwiseEstimation)
+        assert spec.task.window_sec > 0
+        assert spec.task.step_sec > 0
+        assert next(iter(spec.test_sets)) == "basic"  # built-in tasks headline the first set
+        assert spec.y_cols == ["IAS"]
     for dataset_id in ("ball_bearing", "parallel_gearbox", "planetary_gearbox", "gas_foil_bearing"):
         assert dataset_id in idb.datasets.all_datasets

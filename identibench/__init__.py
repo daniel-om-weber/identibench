@@ -109,6 +109,10 @@ simulation_benchmarks = {
     "ParallelGearbox_Simulation": BenchmarkParallelGearbox_Simulation,
     "PlanetaryGearbox_Simulation": BenchmarkPlanetaryGearbox_Simulation,
     "GasFoilBearing_Simulation": BenchmarkGasFoilBearing_Simulation,
+    "BallBearing_GridwiseEstimation": BenchmarkBallBearing_GridwiseEstimation,
+    "ParallelGearbox_GridwiseEstimation": BenchmarkParallelGearbox_GridwiseEstimation,
+    "PlanetaryGearbox_GridwiseEstimation": BenchmarkPlanetaryGearbox_GridwiseEstimation,
+    "GasFoilBearing_GridwiseEstimation": BenchmarkGasFoilBearing_GridwiseEstimation,
 }
 
 prediction_benchmarks = {

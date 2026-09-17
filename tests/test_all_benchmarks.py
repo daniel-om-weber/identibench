@@ -46,11 +46,15 @@ def _dummy_build_model(context):
 
     Outputs zeros, except for 4-channel (quaternion) orientation targets where it
     returns the identity quaternion ``[1, 0, 0, 0]`` so the inclination metric stays
-    finite rather than dividing by a zero-norm quaternion.
+    finite rather than dividing by a zero-norm quaternion. For GridwiseEstimation,
+    ``attrs`` carries ``t_query`` and the model must return one value per query
+    point instead of one row per input sample.
     """
     n_y = len(context.spec.y_cols)
 
     def model(u, y_init, attrs):
+        if "t_query" in attrs:
+            return np.zeros(len(attrs["t_query"]), dtype=np.float32)
         out = np.zeros((len(u), n_y), dtype=np.float32)
         if n_y == 4:
             out[:, 0] = 1.0
@@ -65,7 +69,13 @@ def _run(spec, data_root, monkeypatch):
     assert np.isfinite(result["metric_score"]), f"{spec.name}: non-finite metric_score"
     assert result["training_time_seconds"] >= 0
     assert result["test_time_seconds"] >= 0
-    assert result["benchmark_type"] in ("Simulation", "Prediction", "MaskedPooledInclination", "WindowedEstimation")
+    assert result["benchmark_type"] in (
+        "Simulation",
+        "Prediction",
+        "MaskedPooledInclination",
+        "WindowedEstimation",
+        "GridwiseEstimation",
+    )
     assert result["test_sets"], f"{spec.name}: no test sets scored"
     assert result["metric_name"], f"{spec.name}: no headline metric reported"
     for set_name, metric_scores in result["test_sets"].items():

@@ -122,6 +122,10 @@ BenchmarkGasFoilBearing_Estimation = BenchmarkSpec(
 
 BenchmarkGasFoilBearing_GridwiseEstimation = BenchmarkSpec(
     name="BenchmarkGasFoilBearing_GridwiseEstimation",
+    # window_sec=3.0: the largest single window across every upstream method's search space
+    # over all four IAS datasets (unlike the per-dataset WindowedEstimation windows above,
+    # this one is kept uniform — it's only a context guarantee, not a tuned averaging window).
+    # step_sec=0.1: evaluation grid spacing; presently arbitrary/not yet tuned.
     task=GridwiseEstimation(window_sec=3.0, step_sec=0.1),
     **_gas_foil_bearing,
 )

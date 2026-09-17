@@ -56,6 +56,14 @@ IAS estimate; ``y_init`` is an empty ``(0, 1)`` array (estimation uses no output
 history) and the per-window output is mean-reduced, so a dense or a
 one-value-per-window model both work.
 
+Each dataset also exposes a third spec, ``*_GridwiseEstimation``, carrying the
+:class:`~identibench.GridwiseEstimation` task: a free-run evaluation on a fixed
+grid of query time points instead of window means. It shares the ``model(u,
+y_init, attrs)`` signature above, but ``attrs`` additionally carries
+``attrs["t_query"]`` — the query time points the model must return an estimate
+for (see the class docstring for the full contract and how its ``window_sec``
+differs in meaning from ``WindowedEstimation``'s).
+
 The stratified splits require ``scikit-learn``
 (``pip install "identibench[ias]"``). Downloads are sizable (the ball bearing
 dataset is recorded at 200 kHz); the gas foil bearing is hosted on a single
