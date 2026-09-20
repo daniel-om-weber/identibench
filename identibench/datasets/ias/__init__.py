@@ -64,6 +64,22 @@ y_init, attrs)`` signature above, but ``attrs`` additionally carries
 for (see the class docstring for the full contract and how its ``window_sec``
 differs in meaning from ``WindowedEstimation``'s).
 
+``step_sec`` — the grid spacing — is **per dataset**, set from how much bandwidth that
+dataset's label actually retains. Each file records this as ``attrs["ias_bandwidth_hz"]``
+(``IAS_max × min(cutoff_order, ppr/2)``), and the spacing is Nyquist for it: ball bearing
+140.3 Hz → 3 ms, parallel gearbox 4.0 Hz → 100 ms, gas foil bearing 100.0 Hz → 3 ms. The
+spread is real — a 1 PPR tacho on the parallel gearbox carries two orders of magnitude less
+bandwidth than the ball bearing's 1024-line encoder, so evaluating both on one grid served
+neither.
+
+The planetary gearbox is the deliberate exception. Its zebra-tape label carries 598.5 Hz,
+for which Nyquist would be 0.835 ms — 1.14 M query points per file. It is capped at 3 ms,
+fully resolving its 15 orders whenever the sun shaft is below 11.1 Hz (60.5 % of recorded
+time). This does not bias the score: pooled MAE estimates the mean absolute error at any
+spacing, and 3 ms is already finer than the finest output any benchmarked method can emit.
+It does mean the stored ``diagnostics`` for that dataset are not Nyquist-sampled, so treat
+them as a time series to plot, not one to take a spectrum of.
+
 The stratified splits require ``scikit-learn``
 (``pip install "identibench[ias]"``). Downloads are sizable (the ball bearing
 dataset is recorded at 200 kHz); the gas foil bearing is hosted on a single

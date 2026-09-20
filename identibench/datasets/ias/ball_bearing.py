@@ -19,8 +19,8 @@ from ...dataset import Dataset
 from ...metrics import mae
 from ._common import (
     DatasetInfo,
-    analog_pulse_to_ias,
     download_and_unpack,
+    encoder_pulse_to_ias,
     save_signals_hdf5,
     ias_test_sets,
     write_disturbed_test_sets,
@@ -30,6 +30,17 @@ _INFO = DatasetInfo(
     name="Ball_Bearing",
     zip_url="https://data.mendeley.com/public-api/zip/v43hmbwxpm/download/2",
 )
+
+# Order-domain cutoff for the encoder-derived IAS, in orders of the measured shaft.
+# No per-tooth encoder calibration is applied: no tooth-width pattern is reproducible across
+# recordings above the per-period estimation noise, and ~99% of the apparent pattern's power
+# sits above this cutoff anyway (the residual in-band is ~0.04% of the period).
+_CUTOFF_ORDER = 4.71
+_PPR = 1024
+
+# Highest frequency the label retains: IAS_max * cutoff_order, measured over all 60 recordings
+# (29.80 Hz on the encoder shaft, which is also the measured shaft -- no gearing on this rig).
+_IAS_BANDWIDTH_HZ = 29.80 * _CUTOFF_ORDER  # 140.3 Hz
 
 # Fixed upstream split (verbatim): file stems of the basic test and valid sets;
 # C* recordings (worn bearings) form the out-of-distribution wear set.
@@ -45,6 +56,9 @@ def dl_ball_bearing(
 
     The vibration channel is renamed ``vibration`` → ``Acc_x`` for consistency
     with the other IAS datasets. The download is large (200 kHz recordings).
+
+    Recordings are truncated to the span the encoder resolves; see
+    :func:`._common.encoder_pulse_to_ias`.
     """
     save_path = Path(save_path)
     for split in ("train", "valid", "test", "test_wear"):
@@ -68,20 +82,30 @@ def dl_ball_bearing(
             else:
                 target_subdir = "train"
             mat = scipy.io.loadmat(file)
+            # `sl` truncates the recording to the span the encoder actually measures, rather
+            # than extrapolating the IAS past the first/last pulse; every channel gets it.
+            # Here that costs ~0.001% of the file (the first pulse lands within ~0.1 ms).
+            ias, sl = encoder_pulse_to_ias(
+                np.asarray(mat["Channel_2"]).squeeze(), fs, pulses_per_revolution=_PPR, cutoff_order=_CUTOFF_ORDER
+            )
             signals = {
-                # recalculated, so the IAS is from the middle shaft (which the vibration sensor is
-                # mounted on, whereas the speed sensor is mounted on the input shaft)
-                "IAS": np.asarray(
-                    analog_pulse_to_ias(np.array(mat.get("Channel_2")).squeeze(), fs, pulses_per_revolution=1024)
-                ).squeeze(),
-                "Acc_x": np.asarray(np.array(mat.get("Channel_1")).squeeze() * 10 * 9.81).squeeze(),
+                "IAS": ias,
+                "Acc_x": np.asarray(mat["Channel_1"]).squeeze()[sl] * 10 * 9.81,
             }
-            save_signals_hdf5(signals, save_path / target_subdir / f"{file.stem}.hdf5", fs=fs, gear_ratio=1)
+            # No gearing on this rig: the encoder sits on the shaft the accelerometer measures.
+            save_signals_hdf5(
+                signals,
+                save_path / target_subdir / f"{file.stem}.hdf5",
+                fs=fs,
+                gear_ratio=1,
+                ias_bandwidth_hz=_IAS_BANDWIDTH_HZ,
+            )
 
     write_disturbed_test_sets(save_path, vib_keys=["Acc_x"])
 
 
-ball_bearing_dataset = Dataset("ball_bearing", prepare=dl_ball_bearing)
+# version 2: order-domain IAS filtering (was a savgol + fixed 12.5 Hz time-domain low-pass).
+ball_bearing_dataset = Dataset("ball_bearing", prepare=dl_ball_bearing, version="2")
 
 _ball_bearing = dict(
     u_cols=["Acc_x"],
@@ -104,8 +128,9 @@ BenchmarkBallBearing_GridwiseEstimation = BenchmarkSpec(
     # window_sec=3.0: the largest single window across every upstream method's search space
     # over all four IAS datasets (unlike the per-dataset WindowedEstimation windows above,
     # this one is kept uniform — it's only a context guarantee, not a tuned averaging window).
-    # step_sec=0.1: evaluation grid spacing; presently arbitrary/not yet tuned.
-    task=GridwiseEstimation(window_sec=3.0, step_sec=0.1),
+    # step_sec: Nyquist for the label's retained band, _IAS_BANDWIDTH_HZ = 140.3 Hz
+    # -> 3.56 ms, rounded down to 3 ms (1.19x margin).
+    task=GridwiseEstimation(window_sec=3.0, step_sec=0.003),
     **_ball_bearing,
 )
 

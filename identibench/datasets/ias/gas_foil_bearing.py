@@ -28,16 +28,23 @@ from ._common import (
 
 _INFO = DatasetInfo(
     name="Gas_Foil_Bearing",
-    zip_url="https://tubcloud.tu-berlin.de/s/9emdeBacgRTo4mC/download",
+    zip_url="https://tubcloud.tu-berlin.de/s/AsqHPYa2TK3d2t2/download",
 )
 
 # e.g. Load1_1_UpDown11s_03.hdf5  or  Load2_1_2_Random2_01.hdf5
 _FILENAME_PATTERN = re.compile(r"^(Load\d+)_(\d+(?:_\d+)*)_([A-Za-z][A-Za-z0-9]*)_(\d{2})(\.hdf5)$")
 
 
+# Highest frequency the label retains. Unlike the other three this is not an order cutoff: the
+# IAS comes from an analog RPM channel that is low-pass filtered at 100 Hz in the time domain by
+# the upstream converter.
+_IAS_BANDWIDTH_HZ = 100.0
+
+
 def _copy_with_idb_attrs(src: Path, dest_dir: Path) -> None:
-    """Copy one pre-converted file, renaming ``sampling_rate`` → ``fs`` and
-    synthesizing ``gear_ratio=1`` (no gearing; kept for cross-dataset consistency)."""
+    """Copy one pre-converted file, renaming ``sampling_rate`` → ``fs``, synthesizing
+    ``gear_ratio=1`` (no gearing; kept for cross-dataset consistency) and recording the
+    label bandwidth the other IAS datasets carry."""
     dest = dest_dir / src.name
     shutil.copy(str(src), str(dest))
     with h5py.File(dest, "r+") as f:
@@ -45,6 +52,7 @@ def _copy_with_idb_attrs(src: Path, dest_dir: Path) -> None:
             f.attrs["fs"] = float(f.attrs["sampling_rate"])
             del f.attrs["sampling_rate"]
         f.attrs["gear_ratio"] = 1
+        f.attrs["ias_bandwidth_hz"] = _IAS_BANDWIDTH_HZ
 
 
 def dl_gas_foil_bearing(
@@ -101,7 +109,10 @@ def dl_gas_foil_bearing(
     write_disturbed_test_sets(save_path, vib_keys=["Acc_x", "Acc_y"])
 
 
-gas_foil_bearing_dataset = Dataset("gas_foil_bearing", prepare=dl_gas_foil_bearing)
+# version 2: the upstream pre-converted archive behind `_INFO.zip_url` was replaced. This
+# dataset's own preprocessing is unchanged -- its IAS comes from an analog RPM channel rather
+# than a pulse train, so the order-domain reference the other three moved to does not apply.
+gas_foil_bearing_dataset = Dataset("gas_foil_bearing", prepare=dl_gas_foil_bearing, version="2")
 
 _gas_foil_bearing = dict(
     u_cols=["Acc_x", "Acc_y"],
@@ -125,8 +136,9 @@ BenchmarkGasFoilBearing_GridwiseEstimation = BenchmarkSpec(
     # window_sec=3.0: the largest single window across every upstream method's search space
     # over all four IAS datasets (unlike the per-dataset WindowedEstimation windows above,
     # this one is kept uniform — it's only a context guarantee, not a tuned averaging window).
-    # step_sec=0.1: evaluation grid spacing; presently arbitrary/not yet tuned.
-    task=GridwiseEstimation(window_sec=3.0, step_sec=0.1),
+    # step_sec: Nyquist for the label's retained band, _IAS_BANDWIDTH_HZ = 100.0 Hz -> 5.0 ms,
+    # taken at 3 ms to match the other fast datasets (1.67x margin).
+    task=GridwiseEstimation(window_sec=3.0, step_sec=0.003),
     **_gas_foil_bearing,
 )
 
