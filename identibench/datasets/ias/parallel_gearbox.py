@@ -11,19 +11,17 @@ import re
 import tempfile
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
-from scipy.interpolate import interp1d
 from tqdm import tqdm
 
-from ...benchmark import BenchmarkSpec, Simulation, WindowedEstimation
+from ...benchmark import BenchmarkSpec, Simulation, WindowedEstimation, GridwiseEstimation
 from ...dataset import Dataset
 from ...metrics import mae
 from ._common import (
     DatasetInfo,
     _require_sklearn,
-    analog_pulse_to_ias,
     download_and_unpack,
+    encoder_pulse_to_ias,
     save_signals_hdf5,
     ias_test_sets,
     write_disturbed_test_sets,
@@ -36,6 +34,20 @@ _INFO = DatasetInfo(
 
 _FS = 12800
 
+# Order-domain cutoff for the IAS, in orders of the *input* shaft (where the tacho sits).
+# At 1 pulse/rev this is all the resolution the sensor supports: 0.08 orders means the label
+# is smoothed over ~12.5 revolutions.
+_CUTOFF_ORDER = 0.08
+_PPR = 1
+
+# Highest frequency the label retains. Careful with the shaft: the cutoff is in orders of the
+# INPUT shaft (where the tacho is), while the stored label is the middle shaft, so the input-shaft
+# max is the measured 15.38 Hz label max scaled back up by 95/29 = 50.39 Hz.
+_IAS_BANDWIDTH_HZ = 15.38 * 95 / 29 * _CUTOFF_ORDER  # 4.03 Hz
+
+# Seconds the speed channel lags the vibration in the `_FILES_TO_SHIFT` recordings.
+_SPEED_LAG_SEC = 0.82
+
 # Skipped upstream because the IAS measurement stops early / is intermittent (verbatim).
 _SKIPPED_STEMS = {
     "gear_pitting_M_torque_circulation_2000rpm_10Nm",
@@ -43,7 +55,7 @@ _SKIPPED_STEMS = {
 }
 
 # Recordings whose speed channel is offset against the vibration channels; the
-# IAS is shifted by -0.82 s to re-synchronize (verbatim upstream lookup table).
+# IAS is shifted by `_SPEED_LAG_SEC` to re-synchronize (verbatim upstream lookup table).
 _FILES_TO_SHIFT = {
     "teeth_break_and_bearing_inner_H_torque_circulation_1000rpm_10Nm",
     "teeth_break_L_speed_circulation_20Nm-1000rpm",
@@ -102,15 +114,6 @@ _FILENAME_PATTERN = re.compile(
     """,
     re.VERBOSE,
 )
-
-
-def _shift_speed_by_lookup(calculated_speed: np.ndarray, file_name: str, fs: float) -> np.ndarray:
-    """Align the speed to the vibration (in some files they are not synchronized)."""
-    if file_name not in _FILES_TO_SHIFT:
-        return calculated_speed
-    signal_t = np.arange(len(calculated_speed)) / fs
-    interpolator = interp1d(signal_t, np.array(calculated_speed), kind="linear", fill_value="extrapolate")
-    return interpolator(signal_t - 0.82)
 
 
 def dl_parallel_gearbox(
@@ -176,16 +179,28 @@ def dl_parallel_gearbox(
 
         for file in tqdm(sorted(split_of), desc="Preprocessing CSV files", unit="file"):
             data = pd.read_csv(file)
-            ias = np.array(analog_pulse_to_ias(data["speed"], _FS, pulses_per_revolution=1))
-            ias = _shift_speed_by_lookup(ias, file.stem, _FS)
-            # recalculated, so the IAS is from the middle shaft (which the vibration sensor is
-            # mounted on, whereas the speed sensor is mounted on the input shaft)
+            # The cutoff is in input-shaft orders, which is where the tacho is, so the filter
+            # runs before the transfer to the middle shaft below. `sl` truncates away the span
+            # the 1 PPR tacho cannot resolve -- on this rig up to 3 s at the end, since a
+            # ramping shaft can take that long to complete its final revolution.
+            ias, sl = encoder_pulse_to_ias(
+                data["speed"].to_numpy(), _FS, pulses_per_revolution=_PPR, cutoff_order=_CUTOFF_ORDER
+            )
+            if file.stem in _FILES_TO_SHIFT:
+                # The speed channel lags the vibration in these recordings. `_SPEED_LAG_SEC * _FS`
+                # is a whole number of samples, so this is an exact index shift; carrying the
+                # valid span along with it keeps the newly exposed head from being extrapolated.
+                lag = round(_SPEED_LAG_SEC * _FS)
+                start, stop = sl.start + lag, min(sl.stop + lag, len(data))
+                ias, sl = ias[: stop - start], slice(start, stop)
+            # transfer to the middle shaft, which the vibration sensors are mounted on
+            # (the tacho is on the input shaft)
             ias = ias * 29 / 95
             signals = {
                 "IAS": ias,
-                "gearbox_vibration_x": np.array(data["gearbox_vibration_x"] * 9.81),
-                "gearbox_vibration_y": np.array(data["gearbox_vibration_y"] * 9.81),
-                "gearbox_vibration_z": np.array(data["gearbox_vibration_z"] * 9.81),
+                "gearbox_vibration_x": data["gearbox_vibration_x"].to_numpy()[sl] * 9.81,
+                "gearbox_vibration_y": data["gearbox_vibration_y"].to_numpy()[sl] * 9.81,
+                "gearbox_vibration_z": data["gearbox_vibration_z"].to_numpy()[sl] * 9.81,
             }
             # gear ratio: input shaft, gear mesh, middle shaft (IAS), gear mesh, output shaft
             save_signals_hdf5(
@@ -193,12 +208,14 @@ def dl_parallel_gearbox(
                 save_path / split_of[file] / f"{file.stem}.hdf5",
                 fs=_FS,
                 gear_ratio=[95 / 29, 95, 1, 36, 36 / 90],
+                ias_bandwidth_hz=_IAS_BANDWIDTH_HZ,
             )
 
     write_disturbed_test_sets(save_path, vib_keys=["gearbox_vibration_x", "gearbox_vibration_y", "gearbox_vibration_z"])
 
 
-parallel_gearbox_dataset = Dataset("parallel_gearbox", prepare=dl_parallel_gearbox)
+# version 2: order-domain IAS filtering (was a savgol + fixed 12.5 Hz time-domain low-pass).
+parallel_gearbox_dataset = Dataset("parallel_gearbox", prepare=dl_parallel_gearbox, version="2")
 
 _parallel_gearbox = dict(
     u_cols=["gearbox_vibration_x", "gearbox_vibration_y", "gearbox_vibration_z"],
@@ -213,6 +230,18 @@ BenchmarkParallelGearbox_Estimation = BenchmarkSpec(
     # window_sec = largest window any upstream method needed (Ref-FFT-LSTM 2.13 s),
     # rounded to 2.2 s so every method has enough samples; smaller ones crop/decimate. See ias/__init__.
     task=WindowedEstimation(window_sec=2.2),
+    **_parallel_gearbox,
+)
+
+BenchmarkParallelGearbox_GridwiseEstimation = BenchmarkSpec(
+    name="BenchmarkParallelGearbox_GridwiseEstimation",
+    # window_sec=3.0: the largest single window across every upstream method's search space
+    # over all four IAS datasets (unlike the per-dataset WindowedEstimation windows above,
+    # this one is kept uniform — it's only a context guarantee, not a tuned averaging window).
+    # step_sec: Nyquist for the label's retained band, _IAS_BANDWIDTH_HZ = 4.03 Hz -> 124 ms,
+    # rounded down to 100 ms (1.24x margin). A 1 PPR tacho simply carries very little bandwidth,
+    # so this is the one dataset whose grid does not get finer.
+    task=GridwiseEstimation(window_sec=3.0, step_sec=0.1),
     **_parallel_gearbox,
 )
 

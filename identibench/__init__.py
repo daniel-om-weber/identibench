@@ -7,6 +7,7 @@ from .benchmark import (
     Simulation,
     Prediction,
     WindowedEstimation,
+    GridwiseEstimation,
     EvalResult,
     TrainingContext,
     benchmark_results_to_dataframe,
@@ -72,6 +73,10 @@ from .datasets.ias import (
     BenchmarkParallelGearbox_Simulation,
     BenchmarkPlanetaryGearbox_Simulation,
     BenchmarkGasFoilBearing_Simulation,
+    BenchmarkBallBearing_GridwiseEstimation,
+    BenchmarkParallelGearbox_GridwiseEstimation,
+    BenchmarkPlanetaryGearbox_GridwiseEstimation,
+    BenchmarkGasFoilBearing_GridwiseEstimation,
     ias_benchmarks,
 )
 
@@ -104,6 +109,10 @@ simulation_benchmarks = {
     "ParallelGearbox_Simulation": BenchmarkParallelGearbox_Simulation,
     "PlanetaryGearbox_Simulation": BenchmarkPlanetaryGearbox_Simulation,
     "GasFoilBearing_Simulation": BenchmarkGasFoilBearing_Simulation,
+    "BallBearing_GridwiseEstimation": BenchmarkBallBearing_GridwiseEstimation,
+    "ParallelGearbox_GridwiseEstimation": BenchmarkParallelGearbox_GridwiseEstimation,
+    "PlanetaryGearbox_GridwiseEstimation": BenchmarkPlanetaryGearbox_GridwiseEstimation,
+    "GasFoilBearing_GridwiseEstimation": BenchmarkGasFoilBearing_GridwiseEstimation,
 }
 
 prediction_benchmarks = {
@@ -131,6 +140,7 @@ __all__ = [
     "Simulation",
     "Prediction",
     "WindowedEstimation",
+    "GridwiseEstimation",
     "EvalResult",
     "TrainingContext",
     "benchmark_results_to_dataframe",
@@ -191,4 +201,8 @@ __all__ = [
     "BenchmarkParallelGearbox_Simulation",
     "BenchmarkPlanetaryGearbox_Simulation",
     "BenchmarkGasFoilBearing_Simulation",
+    "BenchmarkBallBearing_GridwiseEstimation",
+    "BenchmarkParallelGearbox_GridwiseEstimation",
+    "BenchmarkPlanetaryGearbox_GridwiseEstimation",
+    "BenchmarkGasFoilBearing_GridwiseEstimation",
 ]

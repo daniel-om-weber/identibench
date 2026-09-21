@@ -56,34 +56,62 @@ IAS estimate; ``y_init`` is an empty ``(0, 1)`` array (estimation uses no output
 history) and the per-window output is mean-reduced, so a dense or a
 one-value-per-window model both work.
 
+Each dataset also exposes a third spec, ``*_GridwiseEstimation``, carrying the
+:class:`~identibench.GridwiseEstimation` task: a free-run evaluation on a fixed
+grid of query time points instead of window means. It shares the ``model(u,
+y_init, attrs)`` signature above, but ``attrs`` additionally carries
+``attrs["t_query"]`` — the query time points the model must return an estimate
+for (see the class docstring for the full contract and how its ``window_sec``
+differs in meaning from ``WindowedEstimation``'s).
+
+``step_sec`` — the grid spacing — is **per dataset**, set from how much bandwidth that
+dataset's label actually retains. Each file records this as ``attrs["ias_bandwidth_hz"]``
+(``IAS_max × min(cutoff_order, ppr/2)``), and the spacing is Nyquist for it: ball bearing
+140.3 Hz → 3 ms, parallel gearbox 4.0 Hz → 100 ms, gas foil bearing 100.0 Hz → 3 ms. The
+spread is real — a 1 PPR tacho on the parallel gearbox carries two orders of magnitude less
+bandwidth than the ball bearing's 1024-line encoder, so evaluating both on one grid served
+neither.
+
+The planetary gearbox is the deliberate exception. Its zebra-tape label carries 598.5 Hz,
+for which Nyquist would be 0.835 ms — 1.14 M query points per file. It is capped at 3 ms,
+fully resolving its 15 orders whenever the sun shaft is below 11.1 Hz (60.5 % of recorded
+time). This does not bias the score: pooled MAE estimates the mean absolute error at any
+spacing, and 3 ms is already finer than the finest output any benchmarked method can emit.
+It does mean the stored ``diagnostics`` for that dataset are not Nyquist-sampled, so treat
+them as a time series to plot, not one to take a spectrum of.
+
 The stratified splits require ``scikit-learn``
 (``pip install "identibench[ias]"``). Downloads are sizable (the ball bearing
 dataset is recorded at 200 kHz); the gas foil bearing is hosted on a single
 TU-Berlin cloud link.
 """
 
-from ...benchmark import WindowedEstimation
+from ...benchmark import WindowedEstimation, GridwiseEstimation
 from .ball_bearing import (
     BenchmarkBallBearing_Estimation,
     BenchmarkBallBearing_Simulation,
+    BenchmarkBallBearing_GridwiseEstimation,
     ball_bearing_dataset,
     dl_ball_bearing,
 )
 from .gas_foil_bearing import (
     BenchmarkGasFoilBearing_Estimation,
     BenchmarkGasFoilBearing_Simulation,
+    BenchmarkGasFoilBearing_GridwiseEstimation,
     dl_gas_foil_bearing,
     gas_foil_bearing_dataset,
 )
 from .parallel_gearbox import (
     BenchmarkParallelGearbox_Estimation,
     BenchmarkParallelGearbox_Simulation,
+    BenchmarkParallelGearbox_GridwiseEstimation,
     dl_parallel_gearbox,
     parallel_gearbox_dataset,
 )
 from .planetary_gearbox import (
     BenchmarkPlanetaryGearbox_Estimation,
     BenchmarkPlanetaryGearbox_Simulation,
+    BenchmarkPlanetaryGearbox_GridwiseEstimation,
     dl_planetary_gearbox,
     planetary_gearbox_dataset,
 )
@@ -99,10 +127,15 @@ ias_benchmarks = {
     "ParallelGearbox_Simulation": BenchmarkParallelGearbox_Simulation,
     "PlanetaryGearbox_Simulation": BenchmarkPlanetaryGearbox_Simulation,
     "GasFoilBearing_Simulation": BenchmarkGasFoilBearing_Simulation,
+    "ParallelGearbox_GridwiseEstimation": BenchmarkParallelGearbox_GridwiseEstimation,
+    "PlanetaryGearbox_GridwiseEstimation": BenchmarkPlanetaryGearbox_GridwiseEstimation,
+    "GasFoilBearing_GridwiseEstimation": BenchmarkGasFoilBearing_GridwiseEstimation,
+    "BallBearing_GridwiseEstimation": BenchmarkBallBearing_GridwiseEstimation,
 }
 
 __all__ = [
     "WindowedEstimation",
+    "GridwiseEstimation",
     "ball_bearing_dataset",
     "parallel_gearbox_dataset",
     "planetary_gearbox_dataset",
@@ -119,5 +152,9 @@ __all__ = [
     "BenchmarkParallelGearbox_Simulation",
     "BenchmarkPlanetaryGearbox_Simulation",
     "BenchmarkGasFoilBearing_Simulation",
+    "BenchmarkParallelGearbox_GridwiseEstimation",
+    "BenchmarkPlanetaryGearbox_GridwiseEstimation",
+    "BenchmarkGasFoilBearing_GridwiseEstimation",
+    "BenchmarkBallBearing_GridwiseEstimation",
     "ias_benchmarks",
 ]

@@ -6,6 +6,7 @@ __all__ = [
     "Simulation",
     "Prediction",
     "WindowedEstimation",
+    "GridwiseEstimation",
     "EvalResult",
     "TestSetScores",
     "TrainingContext",
@@ -155,6 +156,16 @@ def pooled_scores_per_test_set(
     return scores
 
 
+def _pooled_stats(errors: np.ndarray) -> dict[str, float]:
+    """mae/medae/std/max over one pooled 1-D error array. Shared by every pooled task."""
+    return {
+        "mae": float(np.mean(errors)),
+        "medae": float(np.median(errors)),
+        "std": float(np.std(errors)),
+        "max": float(np.max(errors)),
+    }
+
+
 def _require_named_metric(metric: Callable) -> None:
     if not hasattr(metric, "__name__"):
         raise ValueError(
@@ -276,14 +287,6 @@ class WindowedEstimation:
         if self.window_sec <= 0:
             raise ValueError("window_sec must be > 0")
 
-    def _pool_stats(self, errors: np.ndarray) -> dict[str, float]:
-        return {
-            "mae": float(np.mean(errors)),
-            "medae": float(np.median(errors)),
-            "std": float(np.std(errors)),
-            "max": float(np.max(errors)),
-        }
-
     def __call__(self, spec: "BenchmarkSpec", model: Callable) -> EvalResult:
         def file_errors(fpath: Path) -> np.ndarray:
             chunks = [
@@ -292,7 +295,7 @@ class WindowedEstimation:
             chunks = [c for c in chunks if c.size]
             return np.concatenate(chunks) if chunks else np.empty(0)
 
-        scores = pooled_scores_per_test_set(spec, file_errors, self._pool_stats)
+        scores = pooled_scores_per_test_set(spec, file_errors, _pooled_stats)
         return EvalResult(scores=scores, headline=(next(iter(spec.test_sets)), "mae"))
 
     def _window_errors(self, model: Callable, seq: Sequence) -> np.ndarray:
@@ -310,6 +313,98 @@ class WindowedEstimation:
         if not preds:
             return np.empty(0)
         return np.abs(np.asarray(preds) - np.asarray(trues))
+
+
+@dataclass(frozen=True)
+class GridwiseEstimation:
+    """Full-file free-run estimation task, scored on a fixed evaluation grid.
+
+    The model runs once per file (free-run, empty ``y_init``) and must return one
+    estimate per query time point instead of one per input sample. The query grid
+    is centered and non-overlapping-context: points are spaced ``step_sec`` apart,
+    each guaranteed a full ``window_sec`` of surrounding context inside the file
+    (point ``i`` sits at ``i * step_sec + window_sec / 2``, so the first/last
+    ``window_sec / 2`` of the file are never used as query points). Unlike
+    :class:`WindowedEstimation`, ``window_sec`` here is **not** an averaging
+    window — it only bounds how far a query point can sit from the file edges;
+    what the model does with its input context (average it, run a sliding
+    window, look at a single point, ...) is entirely up to the model. The
+    per-query absolute errors are pooled (micro) across all files in a test set,
+    same statistics as :class:`WindowedEstimation` (``mae``/``medae``/``std``/``max``).
+
+    Model contract: ``model(u_full, y_init, attrs) -> np.ndarray`` — the same
+    ``(u, y_init, attrs)`` signature as every other task, called once per file
+    with an empty ``y_init`` (shape ``(0, n_y)``). ``attrs`` is ``seq.attrs``
+    extended with one extra key, ``attrs["t_query"]``: a 1-D array of query time
+    points (seconds, relative to the start of the file) the model must return an
+    estimate for, in the same order. The model must return a 1-D array of
+    exactly ``len(attrs["t_query"])`` values — any other shape (wrong count, an
+    extra trailing channel dim, ...) raises rather than silently broadcasting.
+
+    Only single-output specs are supported (``len(spec.y_cols) == 1``): the task
+    scores one channel against the query grid.
+    """
+
+    window_sec: (
+        float  # Context guarantee around each query point, in seconds (NOT an averaging window — see class docstring).
+    )
+    step_sec: float  # Spacing between successive query points, in seconds.
+
+    def __post_init__(self):
+        if self.window_sec <= 0:
+            raise ValueError("window_sec must be > 0")
+        if self.step_sec <= 0:
+            raise ValueError("step_sec must be > 0")
+
+    def _preds_and_targets(self, model, seq):
+        fs = float(seq.attrs["fs"])
+        win_samples = int(round(self.window_sec * fs))
+        step = max(1, int(round(self.step_sec * fs)))
+        if win_samples <= 0:
+            raise ValueError(f"window_sec={self.window_sec!r} rounds to <1 sample at fs={fs}")
+        # Centered grid, no edge padding: point i sits at i*step + win_half, so every
+        # point keeps a full win_samples-wide window inside the file (the first/last
+        # win_half samples of the file are never used as eval targets).
+        win_half = win_samples // 2
+        n = max(0, (seq.u.shape[0] - win_samples) // step + 1)
+        if n == 0:
+            return np.empty(0), np.empty(0)
+        eval_centers = np.arange(n) * step + win_half
+        centers_sec = eval_centers / fs
+        targets = seq.y[eval_centers, 0]
+        attrs = {**seq.attrs, "t_query": centers_sec}
+        preds = np.asarray(model(seq.u, seq.y[:0], attrs), dtype=float)
+        if preds.shape != targets.shape:
+            raise ValueError(f"model returned {preds.shape} predictions for {n} query points, expected {targets.shape}")
+        return preds, targets
+
+    def __call__(self, spec, model) -> EvalResult:
+        if len(spec.y_cols) != 1:
+            raise ValueError(f"{spec.name}: GridwiseEstimation supports exactly one y_col, got {spec.y_cols!r}")
+        # Not built on pooled_scores_per_test_set: unlike that helper, this task also
+        # needs the raw per-query predictions/targets for diagnostics, not just their
+        # pooled error statistics.
+        preds_by_set, labels_by_set, scores = {}, {}, {}
+        for set_name, files in spec.test_set_files().items():
+            preds_chunks, trues_chunks = [], []
+            for fpath in files:
+                for seq in _load_sequences_from_files([fpath], spec.u_cols, spec.y_cols):
+                    preds, trues = self._preds_and_targets(model, seq)
+                    if preds.size:
+                        preds_chunks.append(preds)
+                        trues_chunks.append(trues)
+            preds = np.concatenate(preds_chunks) if preds_chunks else np.empty(0)
+            trues = np.concatenate(trues_chunks) if trues_chunks else np.empty(0)
+            if preds.size == 0:
+                raise ValueError(f"{spec.name}: test set {set_name!r} produced no error samples")
+            preds_by_set[set_name] = preds
+            labels_by_set[set_name] = trues
+            scores[set_name] = _pooled_stats(np.abs(preds - trues))
+        return EvalResult(
+            scores=scores,
+            headline=(next(iter(spec.test_sets)), "mae"),
+            diagnostics={"predictions": preds_by_set, "labels": labels_by_set},
+        )
 
 
 def _validate_patterns(spec_name: str, label: str, patterns: Patterns) -> None:
