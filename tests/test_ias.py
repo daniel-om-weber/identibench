@@ -145,6 +145,29 @@ def _circular_spacings(angles):
     return np.sort(np.diff(np.concatenate([angles, [angles[0] + 1.0]])))
 
 
+def test_zebra_template_handles_detections_across_phase_wrap():
+    """A stripe at phase zero must not move to half a turn or duplicate another stripe."""
+    n_stripes, n_revs = 76, 200
+    planted = np.arange(n_stripes) / n_stripes
+    jitter = np.tile([-0.0002, 0.0002], n_revs // 2)
+    phases = ((planted[None, :] + jitter[:, None]) % 1.0).ravel()
+
+    template, counts = planetary._fit_template_from_phase(phases, n_revs)
+
+    assert len(template) == n_stripes
+    distances = np.abs((template[:, None] - planted[None, :] + 0.5) % 1.0 - 0.5)
+    np.testing.assert_allclose(distances.min(axis=0), 0.0, atol=1e-12)
+    np.testing.assert_allclose(_circular_spacings(template), 1 / n_stripes, atol=1e-12)
+    np.testing.assert_array_equal(counts, n_revs)
+
+    # Duplicate template angles used to make this fail inside PchipInterpolator.
+    indices = np.arange(n_stripes * 100)
+    times = indices / (n_stripes * 10.0)
+    ias, sl = planetary.reconstruct_ias(times, indices, template, fs=5000, signal_len=50000)
+    assert len(ias) == sl.stop - sl.start
+    np.testing.assert_allclose(ias, 10.0, rtol=1e-6)
+
+
 def test_zebra_round_trip_recovers_template_and_speed():
     fs, n_stripes = 5_000.0, 76
     rng = np.random.default_rng(7)
@@ -244,7 +267,9 @@ def test_add_disturbances_hits_target_snr():
     ias_hz = np.full_like(sig, 20.0)
 
     for target_snr_db in (15, 7.5, 0, -7.5):
-        out = _common.add_disturbances(sig, fs, target_snr_db=target_snr_db, rng=np.random.default_rng(0), ias_hz=ias_hz)
+        out = _common.add_disturbances(
+            sig, fs, target_snr_db=target_snr_db, rng=np.random.default_rng(0), ias_hz=ias_hz
+        )
         noise = out - sig
         snr_db = 10 * np.log10(np.mean(sig**2) / np.mean(noise**2))
         assert snr_db == pytest.approx(target_snr_db, abs=2.0)
