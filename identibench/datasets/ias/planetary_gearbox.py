@@ -144,11 +144,13 @@ def _fit_template_from_phase(
     template, counts = [], []
     half_width = 0.5 / n_guess * 0.6
     for pk in peak_idx:
-        d = np.abs(((phase - bin_centers[pk] + 0.5) % 1.0) - 0.5)
-        nearby = phase[d < half_width]
+        offsets = ((phase - bin_centers[pk] + 0.5) % 1.0) - 0.5
+        nearby = offsets[np.abs(offsets) < half_width]
         if len(nearby) == 0:
             continue  # a peak with no detections inside the half-width would give a NaN angle
-        template.append(np.median(nearby) % 1.0)
+        # Take the median in the peak's local frame so detections on either side of
+        # phase zero remain neighbours; wrap back only after estimating the centre.
+        template.append((bin_centers[pk] + np.median(nearby)) % 1.0)
         counts.append(len(nearby))
     order = np.argsort(template)
     return np.array(template)[order], np.array(counts)[order]
@@ -403,7 +405,8 @@ def dl_planetary_gearbox(
 # version 2: IAS reconstructed from the sun-shaft zebra tape (was the 1PR carrier pickup with a
 # savgol + fixed 12.5 Hz time-domain low-pass). The label is now sun-referenced, so it is
 # ~5.77x the previously shipped values.
-planetary_gearbox_dataset = Dataset("planetary_gearbox", prepare=dl_planetary_gearbox, version="2")
+# version 3: corrected circular stripe-template median.
+planetary_gearbox_dataset = Dataset("planetary_gearbox", prepare=dl_planetary_gearbox, version="3")
 
 _planetary_gearbox = dict(
     u_cols=["Acc_Carrier", "Acc_Sun"],
